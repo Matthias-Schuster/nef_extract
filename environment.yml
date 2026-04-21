@@ -1,0 +1,16 @@
+name: nef_extract
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python >=3.12
+  - numpy
+  - pandas
+  - matplotlib-base
+  - biopython
+  - biopandas
+  - pymol-open-source
+  - openpyxl
+  - pip
+  - pip:
+    - pynmrstar

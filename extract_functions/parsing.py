@@ -120,7 +120,8 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False):
                         shifts[key] = df
 
                     elif category.endswith('_nef_peak'):
-                        key = saveframe.name.replace('nef_nmr_spectrum_', '').split('`')[0]
+                        key = saveframe.name.replace(
+                            'nef_nmr_spectrum_', '').replace('`', '_').strip('_')
 
                         # Attach the metadata (Experiment type/Dimensions) to the DataFrame
                         df.attrs = spec_metadata

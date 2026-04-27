@@ -75,25 +75,38 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False):
 
             # --- Extract metadata for 2D spectra if spectra_plot=True ---
             if spectra_plot and len(spec_metadata['dimensions']) == 2:
-                name = saveframe.name.replace('nef_nmr_spectrum_', '').split('`')[0]
+
+                # 1. Create the unique peaklist key (e.g., "zwei_2") for your dictionaries
+                name = saveframe.name.replace('nef_nmr_spectrum_', '').replace('`', '_').strip('_')
+
+                # 2. Create the spectrum base name (e.g., "zwei") for your filepath list
+                base_name = saveframe.name.replace('nef_nmr_spectrum_', '').split('`')[0]
 
                 path_tags = saveframe.get_tag('_nef_nmr_spectrum.ccpn_spectrum_file_path')
                 path = path_tags[0].strip("'\"") if path_tags else "Unknown"
 
-                # Extract and format contour base
-                contour_tags = saveframe.get_tag('_nef_nmr_spectrum.ccpn_positive_contour_base')
-                contour = contour_tags[0].strip("'\"") if contour_tags else "Unknown"
-                try:
-                    # Format as scientific notation (e.g., 4e8)
-                    # .0e gives '4e+08', replace cleans it up to '4e8'
-                    contour = f"{float(contour):.0e}".replace('+0', '').replace('+', '')
-                except (ValueError, TypeError):
-                    pass
+                # 3. Only proceed if the path is NOT _Undefined_
+                if path != "_Undefined_":
 
-                color_tags = saveframe.get_tag('_nef_nmr_spectrum.ccpn_positive_contour_colour')
-                color = color_tags[0].strip("'\"") if color_tags else "Unknown"
+                    # 4. NEW: Check if this base spectrum is already in our list
+                    already_saved = any(item[1] == base_name for item in spectra_plot_data)
 
-                spectra_plot_data.append([path, name, contour, color])
+                    if not already_saved:
+                        # Extract and format contour base
+                        contour_tags = saveframe.get_tag(
+                            '_nef_nmr_spectrum.ccpn_positive_contour_base')
+                        contour = contour_tags[0].strip("'\"") if contour_tags else "Unknown"
+                        try:
+                            contour = f"{float(contour):.0e}".replace('+0', '').replace('+', '')
+                        except (ValueError, TypeError):
+                            pass
+
+                        color_tags = saveframe.get_tag(
+                            '_nef_nmr_spectrum.ccpn_positive_contour_colour')
+                        color = color_tags[0].strip("'\"") if color_tags else "Unknown"
+
+                        # 5. Append using base_name instead of the peaklist name!
+                        spectra_plot_data.append([path, base_name, contour, color])
 
         # 2. Iterate through the loops inside the saveframe
         for loop in saveframe.loops:

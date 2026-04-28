@@ -76,23 +76,20 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False):
             # --- Extract metadata for 2D spectra if spectra_plot=True ---
             if spectra_plot and len(spec_metadata['dimensions']) == 2:
 
-                # 1. Create the unique peaklist key (e.g., "zwei_2") for your dictionaries
-                name = saveframe.name.replace('nef_nmr_spectrum_', '').replace('`', '_').strip('_')
-
-                # 2. Create the spectrum base name (e.g., "zwei") for your filepath list
+                # Create the spectrum base name for your filepath list
                 base_name = saveframe.name.replace('nef_nmr_spectrum_', '').split('`')[0]
 
                 path_tags = saveframe.get_tag('_nef_nmr_spectrum.ccpn_spectrum_file_path')
                 path = path_tags[0].strip("'\"") if path_tags else "Unknown"
 
-                # 3. Only proceed if the path is NOT _Undefined_
+                # Only proceed if the path is NOT _Undefined_
                 if path != "_Undefined_":
 
-                    # 4. NEW: Check if this base spectrum is already in our list
+                    # Check if this base spectrum is already in our list
                     already_saved = any(item[1] == base_name for item in spectra_plot_data)
 
                     if not already_saved:
-                        # Extract and format contour base
+                        # Extract and format contour base and color
                         contour_tags = saveframe.get_tag(
                             '_nef_nmr_spectrum.ccpn_positive_contour_base')
                         contour = contour_tags[0].strip("'\"") if contour_tags else "Unknown"
@@ -105,7 +102,7 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False):
                             '_nef_nmr_spectrum.ccpn_positive_contour_colour')
                         color = color_tags[0].strip("'\"") if color_tags else "Unknown"
 
-                        # 5. Append using base_name instead of the peaklist name!
+                        # Append using base_name instead of the peaklist name!
                         spectra_plot_data.append([path, base_name, contour, color])
 
         # 2. Iterate through the loops inside the saveframe

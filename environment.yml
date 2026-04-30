@@ -6,7 +6,7 @@ dependencies:
   - python >=3.12
   - numpy
   - pandas
-  - matplotlib-base
+  - matplotlib
   - biopython
   - biopandas
   - pymol-open-source

@@ -171,10 +171,10 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False):
             else:
                 rel_path_str = original_path
 
-            path_str = f"'{rel_path_str}'"
-            name_str = f"'{row[1]}'"
+            path_str = f'"{rel_path_str}"'
+            name_str = f'"{row[1]}"'
             contour_str = str(row[2])
-            color_str = f"'{row[3]}'"
+            color_str = f'"{row[3]}"'
             formatted_rows.append([path_str, name_str, contour_str, color_str])
 
         # 3. Find the maximum width for each of the first 3 columns
@@ -188,9 +188,9 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False):
             # Write the import and the dynamic base_dir
             file.write("# directory of your NMR files\n")
             if str(common_base) and str(common_base) != ".":
-                file.write(f"base_dir = Path('{common_base.as_posix()}')\n\n")
+                file.write(f'base_dir = Path("{common_base.as_posix()}")\n\n')
             else:
-                file.write("base_dir = Path('')\n\n")
+                file.write('base_dir = Path("")\n\n')
 
             # Write the formatted list
             file.write("data = [\n")

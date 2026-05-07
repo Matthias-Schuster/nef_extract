@@ -1,13 +1,20 @@
 import numpy as np
 from pathlib import Path
 
-
 # =============================================================================
 # CSP to PDB Functions
 # =============================================================================
 
-def csp_to_pdb(analysis_df, pdb=None, output_dir="results/structures", max_val=None,
-               CSP=True, Int=False, Vol=False):
+
+def csp_to_pdb(
+    analysis_df,
+    pdb=None,
+    output_dir="results/structures",
+    max_val=None,
+    CSP=True,
+    Int=False,
+    Vol=False,
+):
     """
     Maps NMR metrics (CSPs, Intensity, or Volume) onto a structure, generates
     PyMOL sessions, and cleans up all temporary conversion files.
@@ -27,49 +34,40 @@ def csp_to_pdb(analysis_df, pdb=None, output_dir="results/structures", max_val=N
         return
 
     suffix = pdb_path.suffix.lower()
-    if suffix not in ['.pdb', '.cif']:
+    if suffix not in [".pdb", ".cif"]:
         print(f"❌ Error: {suffix} is not a valid format. Use .pdb or .cif")
         return
 
     # Update output directory dynamically
     out_path = Path(output_dir)
-    analysis_name = analysis_df.attrs.get('analysis_name', '')
+    analysis_name = analysis_df.attrs.get("analysis_name", "")
     if analysis_name:
         out_path = out_path / analysis_name
     out_path.mkdir(parents=True, exist_ok=True)
 
-    is_cif = (suffix == '.cif')
+    is_cif = suffix == ".cif"
     working_pdb = str(out_path / f"TEMP_CONV_{pdb_path.stem}.pdb")
 
     # --- Configuration Map ---
     config = {
-        'CSPs': {
-            'active': CSP, 'prefix': 'CSP', 'calc_attenuation': False
-        },
-        'Norm_Height': {
-            'active': Int, 'prefix': 'Int', 'calc_attenuation': True
-        },
-        'Norm_Volume': {
-            'active': Vol, 'prefix': 'Vol', 'calc_attenuation': True
-        },
-        'Ratio_Height': {
-            'active': Int, 'prefix': 'Int', 'calc_attenuation': True
-        },
-        'Ratio_Volume': {
-            'active': Vol, 'prefix': 'Vol', 'calc_attenuation': True
-        }
+        "CSPs": {"active": CSP, "prefix": "CSP", "calc_attenuation": False},
+        "Norm_Height": {"active": Int, "prefix": "Int", "calc_attenuation": True},
+        "Norm_Volume": {"active": Vol, "prefix": "Vol", "calc_attenuation": True},
+        "Ratio_Height": {"active": Int, "prefix": "Int", "calc_attenuation": True},
+        "Ratio_Volume": {"active": Vol, "prefix": "Vol", "calc_attenuation": True},
     }
 
     # Filter for metrics that are requested AND exist in the DataFrame
-    active_metrics = [cat for cat, s in config.items() if s['active']
-                      and cat in analysis_df.columns.levels[0]]
+    active_metrics = [
+        cat for cat, s in config.items() if s["active"] and cat in analysis_df.columns.levels[0]
+    ]
 
     try:
         # --- 1. PREPARATION & CONVERSION ---
         if is_cif:
             print(f"🔄 Converting {pdb_path.name} for processing...")
             parser = MMCIFParser(QUIET=True)
-            structure = parser.get_structure('struct', str(pdb_path))
+            structure = parser.get_structure("struct", str(pdb_path))
             io = PDBIO()
             io.set_structure(structure)
             io.save(working_pdb)
@@ -86,12 +84,12 @@ def csp_to_pdb(analysis_df, pdb=None, output_dir="results/structures", max_val=N
             temp_check = PandasPdb().read_pdb(working_pdb)
 
             # 1. Extract PDB (Number, Name) pairs
-            pdb_df = temp_check.df['ATOM']
-            pdb_residues = set(zip(pdb_df['residue_number'], pdb_df['residue_name'].str.upper()))
+            pdb_df = temp_check.df["ATOM"]
+            pdb_residues = set(zip(pdb_df["residue_number"], pdb_df["residue_name"].str.upper()))
 
             # 2. Extract DataFrame (Number, Name) pairs from the MultiIndex
-            df_seq = analysis_df.index.get_level_values('sequence_code')
-            df_res = analysis_df.index.get_level_values('residue_name')
+            df_seq = analysis_df.index.get_level_values("sequence_code")
+            df_res = analysis_df.index.get_level_values("residue_name")
             df_residues = set(zip(df_seq, df_res.str.upper()))
 
             # 3. Calculate the intersection of the tuples
@@ -121,12 +119,12 @@ def csp_to_pdb(analysis_df, pdb=None, output_dir="results/structures", max_val=N
             print(f"❌ Failed to parse structure for safety check: {e}")
             return
 
-        seq_codes = analysis_df.index.get_level_values('sequence_code').fillna(-999).astype(int)
+        seq_codes = analysis_df.index.get_level_values("sequence_code").fillna(-999).astype(int)
 
         # --- 4. THE MAPPING LOOP ---
         for category in active_metrics:
             settings = config[category]
-            prefix = settings['prefix']
+            prefix = settings["prefix"]
             spec_list = analysis_df[category].columns
 
             for spec_name in spec_list:
@@ -134,7 +132,7 @@ def csp_to_pdb(analysis_df, pdb=None, output_dir="results/structures", max_val=N
 
                 # Extract data and convert to attenuation if necessary
                 raw_values = analysis_df[(category, spec_name)]
-                if settings['calc_attenuation']:
+                if settings["calc_attenuation"]:
                     map_values = 1.0 - raw_values
                     print(f"   (Mapping attenuation: 1 - {prefix})")
                 else:
@@ -153,10 +151,11 @@ def csp_to_pdb(analysis_df, pdb=None, output_dir="results/structures", max_val=N
                 metric_dict = dict(zip(seq_codes, map_values))
 
                 # Map and Fill missing with 0.0
-                ppdb.df['ATOM']["b_factor"] = ppdb.df['ATOM']["residue_number"].map(
-                    metric_dict).fillna(0.0)
+                ppdb.df["ATOM"]["b_factor"] = (
+                    ppdb.df["ATOM"]["residue_number"].map(metric_dict).fillna(0.0)
+                )
 
-                safe_name = spec_name.replace(' ', '_').replace('/', '_')
+                safe_name = spec_name.replace(" ", "_").replace("/", "_")
                 final_pdb = out_path / f"{prefix}_{safe_name}.pdb"
                 ppdb.to_pdb(str(final_pdb))
 
@@ -169,11 +168,20 @@ def csp_to_pdb(analysis_df, pdb=None, output_dir="results/structures", max_val=N
                 cmd.show_as("cartoon", obj_name)
                 cmd.copy("Cartoon_Obj", obj_name)
 
-                cmd.spectrum("b", "blue_white_orange_red", selection="all",
-                             minimum=min_val, maximum=max_scaling)
+                cmd.spectrum(
+                    "b",
+                    "blue_white_orange_red",
+                    selection="all",
+                    minimum=min_val,
+                    maximum=max_scaling,
+                )
 
-                cmd.ramp_new(f"{prefix}_Scale", "none", range=[min_val, max_scaling],
-                             color=["blue", "white", "orange", "red"])
+                cmd.ramp_new(
+                    f"{prefix}_Scale",
+                    "none",
+                    range=[min_val, max_scaling],
+                    color=["blue", "white", "orange", "red"],
+                )
 
                 cmd.cartoon("putty", obj_name)
 

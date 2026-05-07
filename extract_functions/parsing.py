@@ -5,7 +5,6 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 
-
 # =============================================================================
 # READ .nef Functions
 # =============================================================================
@@ -13,7 +12,7 @@ from pathlib import Path
 
 def force_numeric(column):
     # Coerce turns un-convertible strings into NaNs
-    converted = pd.to_numeric(column, errors='coerce')
+    converted = pd.to_numeric(column, errors="coerce")
 
     # If coercing introduces NEW NaNs (i.e., destroys valid string data like '3-1'),
     # keep the original column.
@@ -45,7 +44,7 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False):
                 - peaks (dict): Extracted peak lists.
     """
     # Load the file
-    with open(os.devnull, 'w') as fnull:
+    with open(os.devnull, "w") as fnull:
         with contextlib.redirect_stderr(fnull), contextlib.redirect_stdout(fnull):
             entry = pynmrstar.Entry.from_file(filepath)
 
@@ -61,25 +60,25 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False):
 
         # 1. Extract saveframe-level metadata (Experiment type and Axis codes)
         spec_metadata = {}
-        if saveframe.category == 'nef_nmr_spectrum':
+        if saveframe.category == "nef_nmr_spectrum":
             # Experiment Type
-            exp_tags = saveframe.get_tag('_nef_nmr_spectrum.experiment_type')
-            spec_metadata['experiment_type'] = exp_tags[0].strip("'") if exp_tags else "Unknown"
+            exp_tags = saveframe.get_tag("_nef_nmr_spectrum.experiment_type")
+            spec_metadata["experiment_type"] = exp_tags[0].strip("'") if exp_tags else "Unknown"
 
             # Dimensions / Axis Codes
-            dim_loop = saveframe.get_loop_by_category('_nef_spectrum_dimension')
+            dim_loop = saveframe.get_loop_by_category("_nef_spectrum_dimension")
             if dim_loop:
-                spec_metadata['dimensions'] = dim_loop.get_tag('_nef_spectrum_dimension.axis_code')
+                spec_metadata["dimensions"] = dim_loop.get_tag("_nef_spectrum_dimension.axis_code")
             else:
-                spec_metadata['dimensions'] = []
+                spec_metadata["dimensions"] = []
 
             # --- Extract metadata for 2D spectra if spectra_plot=True ---
-            if spectra_plot and len(spec_metadata['dimensions']) == 2:
+            if spectra_plot and len(spec_metadata["dimensions"]) == 2:
 
                 # Create the spectrum base name for your filepath list
-                base_name = saveframe.name.replace('nef_nmr_spectrum_', '').split('`')[0]
+                base_name = saveframe.name.replace("nef_nmr_spectrum_", "").split("`")[0]
 
-                path_tags = saveframe.get_tag('_nef_nmr_spectrum.ccpn_spectrum_file_path')
+                path_tags = saveframe.get_tag("_nef_nmr_spectrum.ccpn_spectrum_file_path")
                 path = path_tags[0].strip("'\"") if path_tags else "Unknown"
 
                 # Only proceed if the path is NOT _Undefined_
@@ -91,15 +90,17 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False):
                     if not already_saved:
                         # Extract and format contour base and color
                         contour_tags = saveframe.get_tag(
-                            '_nef_nmr_spectrum.ccpn_positive_contour_base')
+                            "_nef_nmr_spectrum.ccpn_positive_contour_base"
+                        )
                         contour = contour_tags[0].strip("'\"") if contour_tags else "Unknown"
                         try:
-                            contour = f"{float(contour):.0e}".replace('+0', '').replace('+', '')
+                            contour = f"{float(contour):.0e}".replace("+0", "").replace("+", "")
                         except (ValueError, TypeError):
                             pass
 
                         color_tags = saveframe.get_tag(
-                            '_nef_nmr_spectrum.ccpn_positive_contour_colour')
+                            "_nef_nmr_spectrum.ccpn_positive_contour_colour"
+                        )
                         color = color_tags[0].strip("'\"") if color_tags else "Unknown"
 
                         # Append using base_name instead of the peaklist name!
@@ -114,7 +115,7 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False):
 
             if loop.data:
                 # Extract and clean DataFrame
-                columns = [tag.split('.')[-1] for tag in loop.get_tag_names()]
+                columns = [tag.split(".")[-1] for tag in loop.get_tag_names()]
                 df = pd.DataFrame(loop.data, columns=columns).replace(".", np.nan)
 
                 # Apply your working numeric conversion logic
@@ -122,16 +123,19 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False):
 
                 if not df.empty:
                     # Sort into correct dictionary based on category
-                    if category.endswith('_nef_sequence'):
+                    if category.endswith("_nef_sequence"):
                         sequences[saveframe.name] = df
 
-                    elif category.endswith('_nef_chemical_shift'):
-                        key = saveframe.name.replace('nef_chemical_shift_list_', '')
+                    elif category.endswith("_nef_chemical_shift"):
+                        key = saveframe.name.replace("nef_chemical_shift_list_", "")
                         shifts[key] = df
 
-                    elif category.endswith('_nef_peak'):
-                        key = saveframe.name.replace(
-                            'nef_nmr_spectrum_', '').replace('`', '_').strip('_')
+                    elif category.endswith("_nef_peak"):
+                        key = (
+                            saveframe.name.replace("nef_nmr_spectrum_", "")
+                            .replace("`", "_")
+                            .strip("_")
+                        )
 
                         # Attach the metadata (Experiment type/Dimensions) to the DataFrame
                         df.attrs = spec_metadata
@@ -179,7 +183,7 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False):
         max_w2 = max(len(r[2]) for r in formatted_rows)
 
         # 4. Write to file with dynamic padding and base_dir definition
-        with open(output_csv, mode='w', encoding='utf-8') as file:
+        with open(output_csv, mode="w", encoding="utf-8") as file:
 
             # Write the import and the dynamic base_dir
             file.write("# directory of your NMR files\n")
@@ -256,14 +260,14 @@ def print_spectrum_menu(peak_dict):
     # 1. Create the list of keys (the 's' variable)
     s = list(peak_dict.keys())
 
-    print("\n" + "="*25)
+    print("\n" + "=" * 25)
     print("      SPECTRUM MENU")
-    print("="*25)
+    print("=" * 25)
 
     for i, name in enumerate(s):
         print(f" {i:2} -> {name}")
 
-    print("="*25)
+    print("=" * 25)
 
     return s
 
@@ -273,14 +277,14 @@ def report_spectrum_architecture(peak_dict):
     Diagnostic tool to print the dimensionality and atom mapping
     for every spectrum in the dataset using NEF metadata.
     """
-    print("\n" + "="*40)
+    print("\n" + "=" * 40)
     print("      SPECTRUM ARCHITECTURE REPORT")
-    print("="*40)
+    print("=" * 40)
 
     for name, df in peak_dict.items():
         # Retrieve metadata stored in .attrs during extraction
-        dims = df.attrs.get('dimensions', [])
-        exp_type = df.attrs.get('experiment_type', 'Unknown')
+        dims = df.attrs.get("dimensions", [])
+        exp_type = df.attrs.get("experiment_type", "Unknown")
 
         print(f"\nSpectrum: {name}")
         print(f"  Type:  {exp_type}")
@@ -294,7 +298,7 @@ def report_spectrum_architecture(peak_dict):
         else:
             print("  ⚠️ No dimension metadata found for this spectrum.")
 
-    print("\n" + "="*40)
+    print("\n" + "=" * 40)
 
 
 def create_master_pivot(peaks_dict, ref_spectrum=None):
@@ -315,9 +319,9 @@ def create_master_pivot(peaks_dict, ref_spectrum=None):
             The compiled master pivot table containing the aligned 2D spectra.
     """
 
-    meta_in = ['chain_code_1', 'sequence_code_1', 'residue_name_1']
-    meta_out = ['chain_code', 'sequence_code', 'residue_name']
-    data_cols = ['peak_id', 'volume', 'height', 'position_1', 'position_2']
+    meta_in = ["chain_code_1", "sequence_code_1", "residue_name_1"]
+    meta_out = ["chain_code", "sequence_code", "residue_name"]
+    data_cols = ["peak_id", "volume", "height", "position_1", "position_2"]
 
     indexed_dfs = {}
     reference_dims = None
@@ -327,7 +331,7 @@ def create_master_pivot(peaks_dict, ref_spectrum=None):
     if ref_spectrum is not None:
         if ref_spectrum in peaks_dict:
             reference_name = ref_spectrum
-            reference_dims = peaks_dict[ref_spectrum].attrs.get('dimensions', [])
+            reference_dims = peaks_dict[ref_spectrum].attrs.get("dimensions", [])
             print(f"🎯 Locking dimensions to explicit reference: '{
                   reference_name}' {reference_dims}")
         else:
@@ -343,7 +347,7 @@ def create_master_pivot(peaks_dict, ref_spectrum=None):
             return str(val)
 
     for name, df in peaks_dict.items():
-        dims = df.attrs.get('dimensions', [])
+        dims = df.attrs.get("dimensions", [])
         if len(dims) != 2:
             continue
 
@@ -358,32 +362,32 @@ def create_master_pivot(peaks_dict, ref_spectrum=None):
         # Standardize metadata efficiently
         for m in meta_in:
             if m not in temp_df.columns:
-                temp_df[m] = pd.NA if m == 'sequence_code_1' else "unassigned"
-            elif m != 'sequence_code_1':
+                temp_df[m] = pd.NA if m == "sequence_code_1" else "unassigned"
+            elif m != "sequence_code_1":
                 temp_df[m] = temp_df[m].fillna("unassigned")
 
         # Map unassigned peaks using the peak_id
-        if 'peak_id' in temp_df.columns:
-            m = temp_df['sequence_code_1'].isna() | (temp_df['sequence_code_1'] == "")
+        if "peak_id" in temp_df.columns:
+            m = temp_df["sequence_code_1"].isna() | (temp_df["sequence_code_1"] == "")
             if m.any():
                 # Force the column to 'object' dtype so it safely accepts both numbers and strings
-                temp_df['sequence_code_1'] = temp_df['sequence_code_1'].astype(object)
+                temp_df["sequence_code_1"] = temp_df["sequence_code_1"].astype(object)
 
                 # Now we can safely insert the peak_id, regardless of what type it is
-                temp_df.loc[m, 'sequence_code_1'] = temp_df.loc[m, 'peak_id']
+                temp_df.loc[m, "sequence_code_1"] = temp_df.loc[m, "peak_id"]
 
-                cols = ['chain_code_1', 'residue_name_1']
+                cols = ["chain_code_1", "residue_name_1"]
                 temp_df.loc[m, cols] = temp_df.loc[m, cols].fillna("unassigned")
 
         # Drop rows with no sequence data
-        temp_df = temp_df.dropna(subset=['sequence_code_1'])
+        temp_df = temp_df.dropna(subset=["sequence_code_1"])
 
         # Apply the smart integer conversion
-        temp_df['sequence_code_1'] = temp_df['sequence_code_1'].apply(make_int_if_possible)
+        temp_df["sequence_code_1"] = temp_df["sequence_code_1"].apply(make_int_if_possible)
 
         temp_df = temp_df.set_index(meta_in)[[c for c in data_cols if c in temp_df.columns]]
         temp_df.index.names = meta_out
-        temp_df = temp_df[~temp_df.index.duplicated(keep='first')]
+        temp_df = temp_df[~temp_df.index.duplicated(keep="first")]
         indexed_dfs[name] = temp_df
 
     if not indexed_dfs:
@@ -395,24 +399,24 @@ def create_master_pivot(peaks_dict, ref_spectrum=None):
 
     # --- Smart Sorting (Warning-Free & Mixed-Type Safe) ---
     sort_df = table.index.to_frame(index=False)
-    sort_df['seq_num'] = pd.to_numeric(sort_df['sequence_code'], errors='coerce')
-    sort_df['is_unassigned'] = sort_df['seq_num'].isna()
+    sort_df["seq_num"] = pd.to_numeric(sort_df["sequence_code"], errors="coerce")
+    sort_df["is_unassigned"] = sort_df["seq_num"].isna()
 
     # Create a temporary string column just to prevent pandas crashing
     # when it tries to alphabetically compare an int to a str in the final tie-breaker
-    sort_df['seq_str'] = sort_df['sequence_code'].astype(str)
+    sort_df["seq_str"] = sort_df["sequence_code"].astype(str)
 
     # Sort and reorder the main table
-    sort_df = sort_df.sort_values(by=['chain_code', 'is_unassigned', 'seq_num', 'seq_str'])
+    sort_df = sort_df.sort_values(by=["chain_code", "is_unassigned", "seq_num", "seq_str"])
     table = table.iloc[sort_df.index]
 
     # --- Reorder internal columns logically ---
-    preferred_order = ['peak_id', 'position_1', 'position_2', 'height', 'volume']
+    preferred_order = ["peak_id", "position_1", "position_2", "height", "volume"]
     existing_levels = table.columns.get_level_values(1).unique()
     new_order = [c for c in preferred_order if c in existing_levels]
     table = table.reindex(columns=new_order, level=1)
 
-    table.attrs['dimensions'] = reference_dims
+    table.attrs["dimensions"] = reference_dims
 
     # --- EXPORT SECTION: Single Workbook, Multiple Sheets ---
     excel_dir = Path("results")
@@ -420,16 +424,16 @@ def create_master_pivot(peaks_dict, ref_spectrum=None):
     file_path = excel_dir / "spectra_analysis.xlsx"
 
     # Open the Excel writer once to save I/O time
-    with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
+    with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
         table.to_excel(writer, sheet_name="Master_Pivot")
 
-        if 'height' in existing_levels:
-            table.xs('height', axis=1, level=1).to_excel(writer, sheet_name="Heights_Only")
+        if "height" in existing_levels:
+            table.xs("height", axis=1, level=1).to_excel(writer, sheet_name="Heights_Only")
 
-        if 'volume' in existing_levels:
-            table.xs('volume', axis=1, level=1).to_excel(writer, sheet_name="Volumes_Only")
+        if "volume" in existing_levels:
+            table.xs("volume", axis=1, level=1).to_excel(writer, sheet_name="Volumes_Only")
 
-        pos_cols = [c for c in ['position_1', 'position_2'] if c in existing_levels]
+        pos_cols = [c for c in ["position_1", "position_2"] if c in existing_levels]
         if pos_cols:
             table.reindex(columns=pos_cols, level=1).to_excel(writer, sheet_name="Positions_Only")
 
@@ -457,20 +461,19 @@ def align_to_full_sequence(pivot_df, sequence_df):
     Creates a full protein skeleton and attaches NMR data.
     """
     skeleton = (
-        sequence_df[['chain_code', 'sequence_code', 'residue_name']]
+        sequence_df[["chain_code", "sequence_code", "residue_name"]]
         .copy()
-        .set_index(['chain_code', 'sequence_code', 'residue_name'])
+        .set_index(["chain_code", "sequence_code", "residue_name"])
         .sort_index()
     )
 
     # Fix the "MergeError" by giving the skeleton a MultiIndex header
     skeleton.columns = pd.MultiIndex.from_product(
-        [skeleton.columns, ['']],
-        names=pivot_df.columns.names
+        [skeleton.columns, [""]], names=pivot_df.columns.names
     )
 
     # Left Merge preserves sequence skeleton, filling missing NMR data with NaN
-    return pd.merge(skeleton, pivot_df, left_index=True, right_index=True, how='left')
+    return pd.merge(skeleton, pivot_df, left_index=True, right_index=True, how="left")
 
 
 def get_one_letter(res_name):
@@ -478,20 +481,43 @@ def get_one_letter(res_name):
     if pd.isna(res_name):
         return ""
     mapping = {
-        'ALA': 'A', 'ARG': 'R', 'ASN': 'N', 'ASP': 'D', 'CYS': 'C',
-        'GLN': 'Q', 'GLU': 'E', 'GLY': 'G', 'HIS': 'H', 'ILE': 'I',
-        'LEU': 'L', 'LYS': 'K', 'MET': 'M', 'PHE': 'F', 'PRO': 'P',
-        'SER': 'S', 'THR': 'T', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V'
+        "ALA": "A",
+        "ARG": "R",
+        "ASN": "N",
+        "ASP": "D",
+        "CYS": "C",
+        "GLN": "Q",
+        "GLU": "E",
+        "GLY": "G",
+        "HIS": "H",
+        "ILE": "I",
+        "LEU": "L",
+        "LYS": "K",
+        "MET": "M",
+        "PHE": "F",
+        "PRO": "P",
+        "SER": "S",
+        "THR": "T",
+        "TRP": "W",
+        "TYR": "Y",
+        "VAL": "V",
     }
     res = str(res_name).upper()
     return mapping.get(res, res)
 
 
-def add_analysis_to_master(project_data,
-                           ref_spectra, spectra_to_analyze,
-                           align=False, seq_index=0,
-                           alpha=None, normalization_factor=None,
-                           scaling_factors=None, smoothing_window=None, filename=None):
+def add_analysis_to_master(
+    project_data,
+    ref_spectra,
+    spectra_to_analyze,
+    align=False,
+    seq_index=0,
+    alpha=None,
+    normalization_factor=None,
+    scaling_factors=None,
+    smoothing_window=None,
+    filename=None,
+):
     """
     Calculates Chemical Shift Perturbations (CSPs) and intensity/volume ratios.
 
@@ -538,13 +564,13 @@ def add_analysis_to_master(project_data,
     # --- 1. Normalize Input ---
     # If a string/path is passed, immediately wrap it in the expected dictionary structure
     if isinstance(project_data, (str, Path)):
-        project_data = {'pivot': project_data, 'sequences': {}, 'spectra': None}
+        project_data = {"pivot": project_data, "sequences": {}, "spectra": None}
 
     # --- 2. Unpack the Dictionary ---
     # At this point, project_data is guaranteed to be a dictionary
-    pivot_data = project_data.get('pivot')
-    sequences_dict = project_data.get('sequences', {})
-    spectrum_list = project_data.get('spectra')
+    pivot_data = project_data.get("pivot")
+    sequences_dict = project_data.get("sequences", {})
+    spectrum_list = project_data.get("spectra")
 
     # --- 3. Resolve the Pivot Data ---
     # If the pivot data is a path, load it. Otherwise, assume it's already a DataFrame.
@@ -558,7 +584,8 @@ def add_analysis_to_master(project_data,
     # --- 4. Final Safety Check ---
     if pivot_df is None or not isinstance(pivot_df, pd.DataFrame):
         raise ValueError(
-            "❌ ERROR: 'project_data' must contain a valid 'pivot' dataframe or Excel path.")
+            "❌ ERROR: 'project_data' must contain a valid 'pivot' dataframe or Excel path."
+        )
     # -----------------------------
 
     # --- SMART INDEX LOGIC: Convert integers to spectrum names ---
@@ -581,7 +608,7 @@ def add_analysis_to_master(project_data,
     spectra_to_analyze = [resolve_spec(x) for x in spectra_to_analyze]
     # -------------------------------------------------------------
 
-    lab_1, lab_2 = 'position_1', 'position_2'
+    lab_1, lab_2 = "position_1", "position_2"
     print("--- Analysis started ---")
 
     # 1. Maintain Order & Subset DataFrame
@@ -599,27 +626,28 @@ def add_analysis_to_master(project_data,
         raise KeyError(f"Reference spectrum '{ref_spectra}' missing required {lab_1}/{lab_2} data.")
 
     # 3. Symmetric Scaling Logic
-    dims = pivot_df.attrs.get('dimensions', [])
+    dims = pivot_df.attrs.get("dimensions", [])
     w1, w2 = 1.0, 0.142  # Safe default fallback (HN)
 
     if len(dims) >= 2:
         dim1_str, dim2_str = str(dims[0]).upper(), str(dims[1]).upper()
 
         if alpha is None:
+
             def get_weight(dim_name):
-                if 'H' in dim_name:
+                if "H" in dim_name:
                     return 1.0
-                if 'N' in dim_name:
+                if "N" in dim_name:
                     return 0.142
-                if 'C' in dim_name:
+                if "C" in dim_name:
                     return 0.33
                 return 1.0
 
             w1, w2 = get_weight(dim1_str), get_weight(dim2_str)
             print(f"✅ Auto-scaling: {dims[0]}(w={w1}) and {dims[1]}(w={w2}) -> Proton Scale")
         else:
-            w1 = 1.0 if 'H' in dim1_str else float(alpha)
-            w2 = 1.0 if 'H' in dim2_str else float(alpha)
+            w1 = 1.0 if "H" in dim1_str else float(alpha)
+            w2 = 1.0 if "H" in dim2_str else float(alpha)
             print(f"ℹ️ Using manual alpha scaling based on {dims}: w1={w1}, w2={w2}")
     else:
         if alpha is not None:
@@ -633,7 +661,7 @@ def add_analysis_to_master(project_data,
         if (spec_name, lab_1) in updated_df.columns and (spec_name, lab_2) in updated_df.columns:
             d1 = updated_df[(spec_name, lab_1)] - ref_pos1
             d2 = updated_df[(spec_name, lab_2)] - ref_pos2
-            updated_df[('CSPs', spec_name)] = np.sqrt((w1 * d1)**2 + (w2 * d2)**2)
+            updated_df[("CSPs", spec_name)] = np.sqrt((w1 * d1) ** 2 + (w2 * d2) ** 2)
 
         # --- Smart Scaling Factor Logic ---
         spec_scale = 1.0
@@ -650,7 +678,7 @@ def add_analysis_to_master(project_data,
                 spec_scale = float(scaling_factors)
 
         # --- Intensity Ratio & Normalization Pipeline ---
-        for met in ['height', 'volume']:
+        for met in ["height", "volume"]:
             if (spec_name, met) in updated_df.columns and (ref_spectra, met) in updated_df.columns:
 
                 # Base Ratio Calculation
@@ -662,11 +690,12 @@ def add_analysis_to_master(project_data,
                 # Apply Normalization if a factor was provided
                 if normalization_factor is not None:
                     processed_series = normalize_series(
-                        ratio_series, normalization_factor=normalization_factor)
-                    prefix = 'Norm_'
+                        ratio_series, normalization_factor=normalization_factor
+                    )
+                    prefix = "Norm_"
                 else:
                     processed_series = ratio_series
-                    prefix = 'Ratio_'
+                    prefix = "Ratio_"
 
                 # Remove zeros to prevent them from skewing the data
                 clean_series = processed_series.replace(0, np.nan)
@@ -674,13 +703,14 @@ def add_analysis_to_master(project_data,
                 # Optional Smoothing Logic
                 if smoothing_window and smoothing_window > 1:
                     smoothed = clean_series.rolling(
-                        window=smoothing_window, center=True, min_periods=1).mean()
+                        window=smoothing_window, center=True, min_periods=1
+                    ).mean()
                     final_series = smoothed.where(clean_series.notna())
                 else:
                     final_series = clean_series
 
                 # Save to DataFrame with the dynamic prefix
-                updated_df[(f'{prefix}{met.capitalize()}', spec_name)] = final_series
+                updated_df[(f"{prefix}{met.capitalize()}", spec_name)] = final_series
 
     # 5. Handle Alignment
     if align:
@@ -694,33 +724,34 @@ def add_analysis_to_master(project_data,
             print(f"⚠️ Warning: seq_index {seq_index} out of range. Skipping alignment.")
 
     # 6. Add Metadata
-    res_names = updated_df.index.get_level_values('residue_name')
+    res_names = updated_df.index.get_level_values("residue_name")
     one_letter_codes = [get_one_letter(r) for r in res_names]
-    updated_df.insert(0, ('Metadata', 'res_single'), one_letter_codes)
+    updated_df.insert(0, ("Metadata", "res_single"), one_letter_codes)
 
     # 7. Final Column Reordering
-    int_prefix = 'Norm_' if normalization_factor is not None else 'Ratio_'
-    categories = ['Metadata'] + required_cols + \
-        ['CSPs', f'{int_prefix}Height', f'{int_prefix}Volume']
+    int_prefix = "Norm_" if normalization_factor is not None else "Ratio_"
+    categories = (
+        ["Metadata"] + required_cols + ["CSPs", f"{int_prefix}Height", f"{int_prefix}Volume"]
+    )
     existing_cats = [c for c in categories if c in updated_df.columns.levels[0]]
     final_df = updated_df.reindex(columns=existing_cats, level=0)
 
     # 8. Saving Logic
-    base_name = filename.replace('.xlsx', '') if filename else "analysis"
+    base_name = filename.replace(".xlsx", "") if filename else "analysis"
     if filename:
         output_dir = Path("results")
         output_dir.mkdir(parents=True, exist_ok=True)
-        save_path = output_dir / (base_name + '.xlsx')
+        save_path = output_dir / (base_name + ".xlsx")
         final_df.to_excel(save_path)
         print(f"✅ Saved analysis to ({save_path})")
 
-    final_df.attrs['analysis_name'] = base_name
+    final_df.attrs["analysis_name"] = base_name
 
     # 9. Print Summary
     print("\n--- Analysis Summary ---")
     print(f"Reference Spectrum: {ref_spectra}")
-    if 'CSPs' in final_df.columns.levels[0]:
-        plotted_specs = list(final_df['CSPs'].columns)
+    if "CSPs" in final_df.columns.levels[0]:
+        plotted_specs = list(final_df["CSPs"].columns)
         print("Spectra Analyzed:\n  - " + "\n  - ".join(plotted_specs))
     else:
         print("Spectra Analyzed:   None (No CSPs calculated)")

@@ -94,7 +94,7 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False):
                         )
                         contour = contour_tags[0].strip("'\"") if contour_tags else "Unknown"
                         try:
-                            contour = f"{float(contour):.0e}".replace("+0", "").replace("+", "")
+                            contour = f"{float(contour):.2e}".replace("+0", "").replace("+", "")
                         except (ValueError, TypeError):
                             pass
 

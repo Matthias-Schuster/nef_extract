@@ -4,6 +4,7 @@ import contextlib
 import pandas as pd
 import numpy as np
 from pathlib import Path
+import re
 
 # =============================================================================
 # READ .nef Functions
@@ -94,7 +95,7 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False):
                         )
                         contour = contour_tags[0].strip("'\"") if contour_tags else "Unknown"
                         try:
-                            contour = f"{float(contour):.2e}".replace("+0", "").replace("+", "")
+                            contour = f"{float(contour):.0e}".replace("+0", "").replace("+", "")
                         except (ValueError, TypeError):
                             pass
 
@@ -175,12 +176,18 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False):
             name_str = f'"{row[1]}"'
             contour_str = str(row[2])
             color_str = f'"{row[3]}"'
-            formatted_rows.append([path_str, name_str, contour_str, color_str])
 
-        # 3. Find the maximum width for each of the first 3 columns
+            # --- NEW: Generate the CSV filename based on the spectrum name ---
+            csv_str = f'"{row[1]}_positions.csv"'
+
+            # Append 5 items now instead of 4
+            formatted_rows.append([path_str, name_str, contour_str, color_str, csv_str])
+
+        # 3. Find the maximum width for each column to keep alignment neat
         max_w0 = max(len(r[0]) for r in formatted_rows)
         max_w1 = max(len(r[1]) for r in formatted_rows)
         max_w2 = max(len(r[2]) for r in formatted_rows)
+        max_w3 = max(len(r[3]) for r in formatted_rows)  # <-- NEW: added max width for color col
 
         # 4. Write to file with dynamic padding and base_dir definition
         with open(output_csv, mode="w", encoding="utf-8") as file:
@@ -198,14 +205,17 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False):
                 col0 = (r[0] + ",").ljust(max_w0 + 1)
                 col1 = (r[1] + ",").ljust(max_w1 + 1)
                 col2 = (r[2] + ",").ljust(max_w2 + 1)
-                col3 = r[3]
+                col3 = (r[3] + ",").ljust(max_w3 + 1)
+                col4 = r[4]
 
-                line = f"    ({col0}    {col1}    {col2}    {col3}),\n"
+                # Added {col4} to the line template
+                line = f"    ({col0}    {col1}    {col2}    {col3}    {col4}),\n"
                 file.write(line)
             file.write("]\n")
 
-        print(f"--Extracted metadata for {len(spectra_plot_data)
-                                          } 2D spectra and saved to {output_csv}\n")
+        print(
+            f"--Extracted metadata for {len(spectra_plot_data)} 2D spectra and saved to {output_csv}\n"
+        )
 
     if report:
         print("--Read complete!\n")
@@ -437,7 +447,59 @@ def create_master_pivot(peaks_dict, ref_spectrum=None):
         if pos_cols:
             table.reindex(columns=pos_cols, level=1).to_excel(writer, sheet_name="Positions_Only")
 
-    print(f"✅ Exported all tables as sheets to {file_path}\n")
+    # =========================================================
+    # NEW: Export individual CSV files for plotting
+    # =========================================================
+    if pos_cols:
+        plot_dir = excel_dir / "csv"
+        plot_dir.mkdir(parents=True, exist_ok=True)
+
+        # --- FIX 1: Create the sub-folder for uncleaned peaklists ---
+        all_peaks_dir = plot_dir / "all_peaklists"
+        all_peaks_dir.mkdir(parents=True, exist_ok=True)
+
+        # 1. Get sequence codes and 3-letter residue names from the index
+        seq_codes = table.index.get_level_values("sequence_code").astype(str)
+        res_names = table.index.get_level_values("residue_name")
+
+        # 2. Map to 1-letter codes
+        one_letter_codes = [get_one_letter(r) for r in res_names]
+
+        # 3. Combine into single ID (e.g., A24).
+        combined_res = [f"{r}{s}" for r, s in zip(one_letter_codes, seq_codes)]
+
+        # 4. Extract positions and iterate over each spectrum
+        pos_table = table.reindex(columns=pos_cols, level=1)
+        spectra = pos_table.columns.get_level_values(0).unique()
+
+        for spec in spectra:
+            spec_data = pos_table[spec].copy()
+
+            # Insert the combined 'Residue' as the first column
+            spec_data.insert(0, "Residue", combined_res)
+
+            # Drop rows where BOTH positions are unassigned (NaN)
+            spec_data = spec_data.dropna(subset=pos_cols, how="all")
+
+            # Strip trailing CCPN peaklist numbers (e.g., ASF1A_2 -> ASF1A)
+            clean_spec = re.sub(r"_\d+$", "", str(spec))
+
+            # --- FIX 2: Save both files using separate paths ---
+
+            # Save the CSV with the cleaned name in the main folder
+            clean_csv_path = plot_dir / f"{clean_spec}_pos.csv"
+            spec_data.to_csv(clean_csv_path, index=False)
+
+            # Save the uncleaned CSV in the sub-folder
+            unclean_csv_path = all_peaks_dir / f"{spec}_pos.csv"
+            spec_data.to_csv(unclean_csv_path, index=False)
+
+    print(f"✅ Exported all tables as sheets to {file_path}")
+    if pos_cols:
+        print(f"✅ Exported individual position CSVs to {plot_dir}\n")
+    else:
+        print("\n")
+
     return table
 
 

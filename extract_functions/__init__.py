@@ -1,4 +1,4 @@
-__version__ = "1.0.4"
+__version__ = "1.1.0"
 
 from .parsing import (
     extract_all_nef_data,
@@ -12,7 +12,8 @@ from .parsing import (
 from .cyana import (
     export_cyana_seq,
     export_cyana_prot,
-    export_cyana_peaks
+    export_cyana_peaks,
+    export_cyana_project
 )
 
 from .plotting import (

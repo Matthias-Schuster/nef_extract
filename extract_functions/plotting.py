@@ -63,7 +63,7 @@ def plot_nmr_metrics(
     cutoff=0.01,
     ylim_csp=None,
     ylim_ratio=1.1,
-    save_path="results/plots",
+    output_dir=None,
     CSP=True,
     Int=True,
     Vol=True,
@@ -88,9 +88,9 @@ def plot_nmr_metrics(
             Maximum y-axis limit for CSP plots. Defaults to None.
         ylim_ratio (float, optional):
             Maximum y-axis limit for ratio plots. Defaults to 1.1.
-        save_path (str or Path, optional):
-            Base directory where plots will be saved. A subfolder is created if `analysis_name`
-            is in the DataFrame attributes. Defaults to "results/plots".
+        output_dir (str or Path, optional):
+            Base directory where plots will be saved. If None, the function automatically
+            reads the correct project directory hidden in the DataFrame's metadata.
         CSP (bool, optional):
             Whether to generate CSP plots. Defaults to True.
         Int (bool, optional):
@@ -164,6 +164,15 @@ def plot_nmr_metrics(
             if category == "CSPs":
                 plt.axhline(y=cutoff, color="red", linestyle=":", linewidth=1)
 
+            if output_dir is not None:
+                save_path = Path(output_dir) / "plots"
+            else:
+                # Read the directory secretly stored in the DataFrame
+                base_dir = analysis_df.attrs.get("output_dir", Path("results"))
+                save_path = Path(base_dir) / "plots"
+
+            save_path.mkdir(parents=True, exist_ok=True)
+
             if save_path:
                 current_save_path = Path(save_path)
                 analysis_name = analysis_df.attrs.get("analysis_name", "")
@@ -185,7 +194,7 @@ def plot_combined(
     analysis_df,
     ylim_csp=None,
     ylim_ratio=1.05,
-    save_path="results/plots",
+    output_dir=None,
     Int=True,
     Vol=False,
     color_csp="tab:blue",
@@ -205,8 +214,9 @@ def plot_combined(
             Maximum y-axis limit for the CSPs. Defaults to None.
         ylim_ratio (float, optional):
             Maximum y-axis limit for the attenuation axis. Defaults to 1.05.
-        save_path (str or Path, optional):
-            Base directory for saving output plots. Defaults to "results/plots".
+        output_dir (str or Path, optional):
+            Base directory where plots will be saved. If None, the function automatically
+            reads the correct project directory hidden in the DataFrame's metadata.
         Int (bool, optional):
             If True, plots Intensity attenuation alongside CSPs. Defaults to True.
         Vol (bool, optional):
@@ -226,6 +236,15 @@ def plot_combined(
     if "CSPs" not in levels:
         print("Required data (CSPs) missing for combined plot.")
         return
+
+    if output_dir is not None:
+        save_path = Path(output_dir) / "plots"
+    else:
+        # Read the directory secretly stored in the DataFrame
+        base_dir = analysis_df.attrs.get("output_dir", Path("results"))
+        save_path = Path(base_dir) / "plots"
+
+    save_path.mkdir(parents=True, exist_ok=True)
 
     save_path = Path(save_path)
     analysis_name = analysis_df.attrs.get("analysis_name", "")

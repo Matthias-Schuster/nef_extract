@@ -47,9 +47,9 @@ nef_extract/
 │
 ├── environment.yml             # Conda environment dependencies
 │
-└── nef_extract/                # ⬅️ Codebase Subfolder
-    ├── nef_extract_Template.py # Your main analysis script (Entry Point)
-    ├── nef_setup.py            # Auto-routing & directory generation script
+├── nef_extract/                # ⬅️ Codebase Subfolder
+│   ├── nef_extract_Template.py # Your main analysis script (Entry Point)
+│   ├── nef_setup.py            # Auto-routing & directory generation script
 │
 ├── input/                      # (Auto-generated) Place your inputs here
 │   ├── my_specific_data.nef

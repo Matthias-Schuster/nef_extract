@@ -23,7 +23,7 @@ def csp_to_pdb(
         analysis_df (pd.DataFrame):
             The master analysis DataFrame containing the metrics to map.
         pdb (str or Path):
-            The structure file to map onto. If a simple filename is provided 
+            The structure file to map onto. If a simple filename is provided
             (e.g., "input.pdb"), it automatically searches the project's 'input' folder.
         output_dir (str or Path, optional):
             Directory to save the structures. If None, automatically reads from DataFrame.
@@ -32,7 +32,7 @@ def csp_to_pdb(
         CSP, Int, Vol (bool, optional):
             Toggles for which metrics to map onto the structure.
     """
-    
+
     from Bio.PDB import MMCIFParser, PDBIO
     from biopandas.pdb import PandasPdb
     from pymol import cmd
@@ -43,7 +43,7 @@ def csp_to_pdb(
         return
 
     pdb_path = Path(pdb)
-    
+
     # If you pass a simple filename (like "input.pdb"), route it to the project's 'input' folder
     if not pdb_path.is_absolute() and not pdb_path.exists():
         base_dir = analysis_df.attrs.get("output_dir", Path("results").resolve())
@@ -59,7 +59,7 @@ def csp_to_pdb(
     if suffix not in [".pdb", ".cif"]:
         print(f"❌ Error: {suffix} is not a valid format. Use .pdb or .cif")
         return
-    
+
     # --- 2. Auto-Routing the Output Directory ---
     if output_dir is not None:
         base_path = Path(output_dir) / "structures"
@@ -67,13 +67,13 @@ def csp_to_pdb(
         # Read the directory secretly stored in the DataFrame
         base_dir = analysis_df.attrs.get("output_dir", Path("results"))
         base_path = Path(base_dir) / "structures"
-        
+
     analysis_name = analysis_df.attrs.get("analysis_name", "")
     if analysis_name:
         out_path = base_path / analysis_name
     else:
         out_path = base_path
-        
+
     out_path.mkdir(parents=True, exist_ok=True)
 
     # --- 3. Temp File Setup ---

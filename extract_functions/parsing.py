@@ -23,7 +23,7 @@ def force_numeric(column):
     return converted
 
 
-def extract_all_nef_data(filepath, report=False, spectra_plot=False):
+def extract_all_nef_data(filepath, report=False, spectra_plot=False, output_dir=None):
     """
     Extracts and compiles sequences, chemical shift lists, and peak lists from an NEF file.
 
@@ -36,6 +36,9 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False):
         spectra_plot (bool, optional):
             If True, generates an input configuration file of all 2D spectra tailored for
             the external NMR_2D_plot script. Defaults to False.
+        output_dir (str or Path, optional):
+            Base directory where the spectra_metadata.txt file will be saved.
+            If None, it automatically routes to the project's results folder.
 
     Returns:
         tuple:
@@ -144,9 +147,14 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False):
 
     # --- Save the extracted 2D metadata directly to a custom formatted file ---
     if spectra_plot and spectra_plot_data:
-        output_csv = "results/spectra_metadata.txt"
-        output_dir = Path(output_csv).parent
-        output_dir.mkdir(parents=True, exist_ok=True)
+        # NEW ROUTING LOGIC
+        if output_dir:
+            output_csv = Path(output_dir) / "spectra_metadata.txt"
+        else:
+            output_csv = Path("results/spectra_metadata.txt")
+
+        csv_dir = output_csv.parent
+        csv_dir.mkdir(parents=True, exist_ok=True)
 
         # 1. Find the common base directory
         valid_paths = [str(Path(r[0]).resolve()) for r in spectra_plot_data if r[0] != "Unknown"]
@@ -311,7 +319,7 @@ def report_spectrum_architecture(peak_dict):
     print("\n" + "=" * 40)
 
 
-def create_master_pivot(peaks_dict, ref_spectrum=None):
+def create_master_pivot(peaks_dict, ref_spectrum=None, output_dir=None):
     """
     Combines 2D spectra into a master table and exports specific sub-tables to an Excel workbook.
     Automatically ensures that sequence codes are cast to integers where possible to
@@ -323,6 +331,9 @@ def create_master_pivot(peaks_dict, ref_spectrum=None):
         ref_spectrum (int or str, optional):
             The identifier for the reference spectrum to anchor the 2D spectra data
             (e.g., specifying the 15N or 13C HSQC). Defaults to None.
+        output_dir (str or Path, optional):
+            Base directory for the exported Excel workbook and CSV files.
+            If None, it defaults to the generic 'results' folder.
 
     Returns:
         pd.DataFrame:
@@ -429,7 +440,11 @@ def create_master_pivot(peaks_dict, ref_spectrum=None):
     table.attrs["dimensions"] = reference_dims
 
     # --- EXPORT SECTION: Single Workbook, Multiple Sheets ---
-    excel_dir = Path("results")
+    if output_dir is not None:
+        excel_dir = Path(output_dir)
+    else:
+        excel_dir = Path("results")
+
     excel_dir.mkdir(parents=True, exist_ok=True)
     file_path = excel_dir / "spectra_analysis.xlsx"
 
@@ -483,8 +498,6 @@ def create_master_pivot(peaks_dict, ref_spectrum=None):
 
             # Strip trailing CCPN peaklist numbers (e.g., ASF1A_2 -> ASF1A)
             clean_spec = re.sub(r"_\d+$", "", str(spec))
-
-            # --- FIX 2: Save both files using separate paths ---
 
             # Save the CSV with the cleaned name in the main folder
             clean_csv_path = plot_dir / f"{clean_spec}_pos.csv"
@@ -588,8 +601,8 @@ def add_analysis_to_master(
 
     Args:
         project_data (dict, str, or Path):
-            A dictionary containing 'pivot', 'sequences',
-            and 'spectra'. Alternatively, a path/string pointing to a modified Excel file.
+            A dictionary containing 'pivot', 'sequences', 'spectra', 'out_dir',
+            and 'input_dir'. Alternatively, a path/string pointing to a modified Excel file.
         ref_spectra (int or str):
             The reference spectrum for the analysis.
         spectra_to_analyze (int, str, or list):
@@ -615,7 +628,8 @@ def add_analysis_to_master(
             Window size for rolling average of intensities across neighboring residues.
             Good for PRE analyses.
         filename (str, optional):
-            Filename for the exported Excel table. If provided, saves to the 'results/' directory.
+            Filename for the exported Excel table (e.g., "analysis_1"). The function
+            automatically routes it to the project's specific output directory.
 
     Returns:
         pd.DataFrame:
@@ -799,15 +813,26 @@ def add_analysis_to_master(
     final_df = updated_df.reindex(columns=existing_cats, level=0)
 
     # 8. Saving Logic
-    base_name = filename.replace(".xlsx", "") if filename else "analysis"
     if filename:
-        output_dir = Path("results")
-        output_dir.mkdir(parents=True, exist_ok=True)
-        save_path = output_dir / (base_name + ".xlsx")
+        # Convert the incoming string or Path object into a Path object
+        save_path = Path(filename)
+
+        # Ensure it has the .xlsx extension without duplicating it
+        if save_path.suffix != ".xlsx":
+            save_path = save_path.with_suffix(".xlsx")
+
+        # Create the parent directories (e.g., results/TEMPLATE/) automatically
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+
         final_df.to_excel(save_path)
         print(f"✅ Saved analysis to ({save_path})")
 
-    final_df.attrs["analysis_name"] = base_name
+        # Use the stem (filename without extension) for the internal attribute
+        final_df.attrs["analysis_name"] = save_path.stem
+        final_df.attrs["output_dir"] = save_path.parent
+    else:
+        final_df.attrs["analysis_name"] = "analysis"
+        final_df.attrs["output_dir"] = Path("results")
 
     # 9. Print Summary
     print("\n--- Analysis Summary ---")

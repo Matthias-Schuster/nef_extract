@@ -331,13 +331,14 @@ def generate_xeasy_header(spectrum_type, dimensions):
     return header
 
 
-def export_cyana_peaks(peak_dict, out_path="results/cyana_export"):
+def export_cyana_peaks(peak_dict, output_dir="results/cyana_export"):
     """
     Exports peak dictionaries to CYANA / Xeasy format.
     Preserves the exact column order from the input data.
     """
-    output_dir = Path(out_path)
-    output_dir.mkdir(parents=True, exist_ok=True)
+
+    out_path = Path(output_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
 
     types_map = {
         "HNCO": "HNCO",
@@ -409,10 +410,21 @@ def export_cyana_peaks(peak_dict, out_path="results/cyana_export"):
             line = f"{pid}{pos_str}1 U   {vol_str} 0.000000E+00 e 0  {assign_str}".strip()
             lines.append(line)
 
-        file_path = output_dir / f"{name.replace(' ', '_').replace('/', '_')}.peaks"
+        file_path = out_path / f"{name.replace(' ', '_').replace('/', '_')}.peaks"
         with open(file_path, "w") as f:
             f.write(header)
             if lines:
                 f.write("\n".join(lines) + "\n")
 
-    print(f"✅ Exported {len(peak_dict)} .peaks files sequentially to {out_path}/")
+    print(f"✅ Exported {len(peak_dict)} .peaks files sequentially to {output_dir}/")
+    
+
+def export_cyana_project(sequences_dict, shifts_dict, peak_dict, output_dir):
+    """
+    Wrapper to export all CYANA files to the specific project directory at once.
+    """
+    print("\n--- Exporting to CYANA ---")
+    export_cyana_seq(sequences_dict, output_dir=output_dir)
+    export_cyana_prot(shifts_dict, output_dir=output_dir)
+    export_cyana_peaks(peak_dict, output_dir=output_dir)
+    print("--------------------------\n")

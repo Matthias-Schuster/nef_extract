@@ -8,7 +8,7 @@ This pipeline automates tedious tasks such as extracting peak lists, calculating
 
 * **NEF Parsing:** Extract sequences, chemical shift lists, and peak lists from standard `.nef` files.
 * **Automated CSP & Attenuation Calculations:** Automatically compute CSPs with nucleus-specific scaling factors and calculate signal attenuation (1 - I/I0).
-* **Smart Auto-Routing:** Never manually define paths again. The pipeline automatically resolves your project roots, inputs, and results directories based on your script location.
+* **Smart Auto-Routing:** The pipeline automatically resolves your project roots, inputs, and results directories based on the name of your script.
 * **Data Export to CYANA:** Instantly convert and export your NMR sequences, chemical shifts, and peak lists into CYANA files in a single command.
 * **Advanced Plotting:** Generate bar plots and dual-axis graphs combining CSPs and intensity attenuation.
 * **Direct Structural Mapping:** Map computed CSPs or attenuation values directly onto the B-factor column of PDB/CIF files and auto-generate beautifully styled PyMOL sessions (`.pse`).
@@ -48,15 +48,15 @@ nef_extract/
 ├── environment.yml             # Conda environment dependencies
 │
 ├── nef_extract/                # ⬅️ Codebase Subfolder
-│   ├── nef_extract_Template.py # Your main analysis script (Entry Point)
+│   ├── nef_extract_Template.py # Your main analysis script (COPY AND RENAME !)
 │   ├── nef_setup.py            # Auto-routing & directory generation script
 │
-├── input/                      # (Auto-generated) Place your inputs here
+├── input/                      # Place your inputs (.nef and .pdb) here
 │   ├── my_specific_data.nef
 │   └── input.pdb
 │
-└── results/                    # (Auto-generated) Output directory
-    └── Template/               # Project-specific subfolder
+└── results/                    # Output directory
+    └── Template/               # Project-specific subfolder 
         ├── analysis_1.xlsx     # Master DataFrames with calculated metrics
         ├── spectra_metadata.txt
         ├── plots/              # Generated bar plots & combined plots
@@ -70,20 +70,16 @@ nef_extract/
 `nef_extract` is designed to be used directly within a Python script. Below is a complete example demonstrating the standard workflow, utilizing the built-in auto-routing setup.
 
 ### 1. Setup and Extraction
-Load the Nef file and optionally rename the spectra.
+Copy and rename the `nef_extract_Template.py` script and change the FILE_NAME to your nef file. Copy your nef file into the input folder.
+
+Execute the script, optionally rename the spectra.
 Spectra_plot=True generates an input file for the NMR_2D_plot script.
-It also generates the spectra menu for the analysis. 
-This automatically creates an organized `input/` and `results/` folder structure and handles all pathing.
+The spectra menu give you the spectrum number for the analysis. 
 
 ```python
 
-# 1. System Setup & Auto-Routing
+# 1. Select your file
 FILE_NAME = "my_specific_data.nef" 
-_, PROJECT_NAME, paths = setup_nef_project(__file__, nef_filename=FILE_NAME)
-
-input_nef = paths["input_nef"]
-out_dir = paths["project_out"]
-input_dir = paths["input_dir"]
 
 # 2. Data Extraction
 # spectra_plot=True generates an input file for the NMR_2D_plot script.
@@ -106,9 +102,7 @@ s = ef.print_spectrum_menu(all_peaks)
 Export all your sequences, chemical shifts, and peak lists perfectly formatted for CYANA structure calculations using a single wrapper.
 
 ```python
-print("\n--- Exporting to CYANA ---")
 ef.export_cyana_project(all_sequences, all_shifts, all_peaks, output_dir=out_dir / "cyana")
-print("--------------------------\n")
 ```
 
 ### 3. Generate the Analysis
@@ -123,7 +117,7 @@ Additional functions are described in the function definition.
 CSPs and intensities are automatically calculated and stored in the data frame. 
 The data frames are also saved as excel files.
 
-By passing `out_dir` and `input_dir` into the `project_data` dictionary, all generated files, plots, and PyMOL sessions will automatically be routed to their correct subfolders inside `results/YOUR_PROJECT/`.
+All generated files, plots, and PyMOL sessions will automatically be routed to their correct subfolders inside `results/YOUR_PROJECT/`.
 
 ```python
 master_pivot = ef.create_master_pivot(all_peaks, output_dir=out_dir, ref_spectrum=s[0])
@@ -142,6 +136,7 @@ analysis_1 = ef.add_analysis_to_master(
 
 ### 4. Plotting and Visualization
 Because the DataFrame tracks its own location metadata, plotting and PDB mapping functions require minimal arguments. 
+Additional arguments are described in the function definition. 
 
 * `plot_nmr_metrics` generates bar-plots for individual metrics.
 * `plot_combined` generates a dual-axis plot.

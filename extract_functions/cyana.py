@@ -417,7 +417,7 @@ def export_cyana_peaks(peak_dict, output_dir="results/cyana_export"):
                 f.write("\n".join(lines) + "\n")
 
     print(f"✅ Exported {len(peak_dict)} .peaks files sequentially to {output_dir}/")
-    
+
 
 def export_cyana_project(sequences_dict, shifts_dict, peak_dict, output_dir):
     """

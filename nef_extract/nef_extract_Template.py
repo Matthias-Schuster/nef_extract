@@ -5,7 +5,7 @@ from nef_setup import setup_nef_project
 # ==========================================
 FILE_NAME = "my_specific_data.nef" 
 
-_, PROJECT_NAME, paths = setup_nef_project(__file__, nef_filename=FILE_NAME)
+PROJECT_NAME, paths = setup_nef_project(__file__, nef_filename=FILE_NAME)
 import extract_functions as ef
 
 # ==========================================

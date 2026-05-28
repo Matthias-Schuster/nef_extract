@@ -743,11 +743,9 @@ def add_analysis_to_master(
                 if i < len(scaling_factors):
                     spec_scale = float(scaling_factors[i])
                 else:
-                    print(
-                        f"⚠️ Warning: Missing scaling factor in list for '{
+                    print(f"⚠️ Warning: Missing scaling factor in list for '{
                             spec_name
-                        }'. Defaulting to 1.0"
-                    )
+                        }'. Defaulting to 1.0")
             elif isinstance(scaling_factors, (int, float)):
                 spec_scale = float(scaling_factors)
 

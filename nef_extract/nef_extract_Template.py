@@ -1,5 +1,4 @@
 from nef_setup import setup_nef_project
-import extract_functions as ef
 
 # ==========================================
 # 1. AUTO-ROUTING, SYSTEM SETUP & FILE CHECK
@@ -7,6 +6,7 @@ import extract_functions as ef
 FILE_NAME = "my_specific_data.nef" 
 
 _, PROJECT_NAME, paths = setup_nef_project(__file__, nef_filename=FILE_NAME)
+import extract_functions as ef
 
 # ==========================================
 # 2. I/O HUB 

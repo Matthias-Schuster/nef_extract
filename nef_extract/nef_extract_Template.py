@@ -37,9 +37,7 @@ s = ef.print_spectrum_menu(all_peaks)
 
 # %%
 if CYANA_EXPORT:
-    print("\n--- Exporting to CYANA ---")
     ef.export_cyana_project(all_sequences, all_shifts, all_peaks, output_dir=out_dir / "cyana")
-    print("--------------------------\n")
 
 # %%
 if CSP_CALCULATION:

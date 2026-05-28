@@ -61,7 +61,6 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False, output_dir=
     if report:
         print("\n--Print all loops in the nef file:")
     for saveframe in entry:
-
         # 1. Extract saveframe-level metadata (Experiment type and Axis codes)
         spec_metadata = {}
         if saveframe.category == "nef_nmr_spectrum":
@@ -78,7 +77,6 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False, output_dir=
 
             # --- Extract metadata for 2D spectra if spectra_plot=True ---
             if spectra_plot and len(spec_metadata["dimensions"]) == 2:
-
                 # Create the spectrum base name for your filepath list
                 base_name = saveframe.name.replace("nef_nmr_spectrum_", "").split("`")[0]
 
@@ -87,7 +85,6 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False, output_dir=
 
                 # Only proceed if the path is NOT _Undefined_
                 if path != "_Undefined_":
-
                     # Check if this base spectrum is already in our list
                     already_saved = any(item[1] == base_name for item in spectra_plot_data)
 
@@ -199,7 +196,6 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False, output_dir=
 
         # 4. Write to file with dynamic padding and base_dir definition
         with open(output_csv, mode="w", encoding="utf-8") as file:
-
             # Write the import and the dynamic base_dir
             file.write("# directory of your NMR files\n")
             if str(common_base) and str(common_base) != ".":
@@ -257,7 +253,6 @@ def generate_rename_template(peak_dict):
     max_len = max(len(str(name)) for name in peak_dict.keys())
 
     for name in peak_dict.keys():
-
         # Create the left side:  'name':
         left_side = f"'{name}':"
 
@@ -312,7 +307,7 @@ def report_spectrum_architecture(peak_dict):
         if dims:
             for i, atom in enumerate(dims):
                 # i+1 matches 'position_1', 'position_2', etc.
-                print(f"  Axis {i+1}: {atom} (Mapped to 'position_{i+1}')")
+                print(f"  Axis {i + 1}: {atom} (Mapped to 'position_{i + 1}')")
         else:
             print("  ⚠️ No dimension metadata found for this spectrum.")
 
@@ -353,8 +348,9 @@ def create_master_pivot(peaks_dict, ref_spectrum=None, output_dir=None):
         if ref_spectrum in peaks_dict:
             reference_name = ref_spectrum
             reference_dims = peaks_dict[ref_spectrum].attrs.get("dimensions", [])
-            print(f"🎯 Locking dimensions to explicit reference: '{
-                  reference_name}' {reference_dims}")
+            print(
+                f"🎯 Locking dimensions to explicit reference: '{reference_name}' {reference_dims}"
+            )
         else:
             print(f"⚠️ WARNING: '{ref_spectrum}' not found. Falling back to auto-detection.")
 
@@ -732,7 +728,6 @@ def add_analysis_to_master(
 
     # 4. Main Calculation Loop
     for i, spec_name in enumerate(spectra_to_analyze):
-
         # --- CSP Calculation ---
         if (spec_name, lab_1) in updated_df.columns and (spec_name, lab_2) in updated_df.columns:
             d1 = updated_df[(spec_name, lab_1)] - ref_pos1
@@ -748,15 +743,17 @@ def add_analysis_to_master(
                 if i < len(scaling_factors):
                     spec_scale = float(scaling_factors[i])
                 else:
-                    print(f"⚠️ Warning: Missing scaling factor in list for '{
-                          spec_name}'. Defaulting to 1.0")
+                    print(
+                        f"⚠️ Warning: Missing scaling factor in list for '{
+                            spec_name
+                        }'. Defaulting to 1.0"
+                    )
             elif isinstance(scaling_factors, (int, float)):
                 spec_scale = float(scaling_factors)
 
         # --- Intensity Ratio & Normalization Pipeline ---
         for met in ["height", "volume"]:
             if (spec_name, met) in updated_df.columns and (ref_spectra, met) in updated_df.columns:
-
                 # Base Ratio Calculation
                 target_vals = updated_df[(spec_name, met)] * spec_scale
                 safe_ref = updated_df[(ref_spectra, met)].replace(0, np.nan)

@@ -1,6 +1,5 @@
 from pathlib import Path
 import sys
-import importlib
 
 def setup_nef_project(
     script_file,
@@ -18,18 +17,13 @@ def setup_nef_project(
     # Project root is one level above nef_extract/
     root_dir = script_dir.parent
 
-    # Make extract_functions importable from the root directory
+    # Make the root directory available to Python's import system
     if str(root_dir) not in sys.path:
         sys.path.insert(0, str(root_dir))
-    
-    ef = importlib.import_module("extract_functions")
 
     # Extract project name from filename
     script_name = script_path.stem
-    if script_name.startswith(prefix):
-        project_name = script_name[len(prefix) :]
-    else:
-        project_name = script_name
+    project_name = script_name[len(prefix):] if script_name.startswith(prefix) else script_name
 
     # Define core directory paths
     project_out = root_dir / results_folder / project_name
@@ -52,7 +46,6 @@ def setup_nef_project(
         input_nef = input_dir / nef_filename
         if not input_nef.exists():
             raise FileNotFoundError(f"Could not find '{nef_filename}' in the input directory:\n-> {input_nef}")
-        
         paths["input_nef"] = input_nef
 
     if verbose:
@@ -65,4 +58,4 @@ def setup_nef_project(
         print(f"Output dir:   {paths['project_out']}")
         print("--------------------------------\n")
 
-    return ef, project_name, paths
+    return project_name, paths

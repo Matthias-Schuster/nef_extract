@@ -132,15 +132,24 @@ def csp_to_pdb(
 
             if not overlap:
                 print("❌ Error: No residue numbering AND type overlap between DataFrame and PDB!")
-                print(f"   PDB Residues: {
-                      min(pdb_nums) if pdb_nums else 'N/A'}-{max(pdb_nums) if pdb_nums else 'N/A'}")
-                print(f"   DF Residues:  {
-                      min(df_nums) if df_nums else 'N/A'}-{max(df_nums) if df_nums else 'N/A'}")
+                print(
+                    f"   PDB Residues: {min(pdb_nums) if pdb_nums else 'N/A'}-{
+                        max(pdb_nums) if pdb_nums else 'N/A'
+                    }"
+                )
+                print(
+                    f"   DF Residues:  {min(df_nums) if df_nums else 'N/A'}-{
+                        max(df_nums) if df_nums else 'N/A'
+                    }"
+                )
                 return
 
             elif len(overlap) < len(df_residues):
-                print(f"❌ Error: Incomplete mapping! Only {len(overlap)} of {
-                      len(df_residues)} DataFrame residues matched the PDB.")
+                print(
+                    f"❌ Error: Incomplete mapping! Only {len(overlap)} of {
+                        len(df_residues)
+                    } DataFrame residues matched the PDB."
+                )
                 unmapped = df_residues - overlap
                 unmapped_nums = sorted([res[0] for res in unmapped])
                 print(f"   Unmapped DF Residue Numbers: {unmapped_nums}")

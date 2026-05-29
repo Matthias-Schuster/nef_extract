@@ -21,7 +21,7 @@ To guarantee compatibility, please install the provided conda environment:
 
 ```bash
 # Clone the repository
-git clone [https://github.com/Matthias-Schuster/nef_extract.git](https://github.com/Matthias-Schuster/nef_extract.git)
+git clone https://github.com/Matthias-Schuster/nef_extract.git
 cd nef_extract
 
 # Create the conda environment from the provided yaml file

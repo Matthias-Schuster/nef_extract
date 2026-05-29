@@ -86,4 +86,3 @@ if CSP_CALCULATION:
     )
 
     ef.plot_nmr_metrics(analysis_2, ylim_csp=None, CSP=True, Int=True, Vol=False)
-

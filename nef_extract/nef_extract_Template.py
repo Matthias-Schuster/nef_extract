@@ -87,17 +87,3 @@ if CSP_CALCULATION:
 
     ef.plot_nmr_metrics(analysis_2, ylim_csp=None, CSP=True, Int=True, Vol=False)
 
-    # %% Analysis 3
-    # Point the modified pivot to the newly generated results folder
-    project_data["pivot"] = out_dir / "spectra_analysis_mod.xlsx"
-
-    analysis_3 = ef.add_analysis_to_master(
-        project_data,
-        ref_spectra=0,
-        spectra_to_analyze=s,
-        align=False,
-        normalization_factor=0.95,
-        filename=out_dir / "analysis_3",
-    )
-
-    ef.plot_nmr_metrics(analysis_3, ylim_csp=None, CSP=True, Int=True, Vol=False)

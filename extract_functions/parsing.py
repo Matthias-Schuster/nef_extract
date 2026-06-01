@@ -192,7 +192,7 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False, output_dir=
         max_w0 = max(len(r[0]) for r in formatted_rows)
         max_w1 = max(len(r[1]) for r in formatted_rows)
         max_w2 = max(len(r[2]) for r in formatted_rows)
-        max_w3 = max(len(r[3]) for r in formatted_rows)  # <-- NEW: added max width for color col
+        max_w3 = max(len(r[3]) for r in formatted_rows)
 
         # 4. Write to file with dynamic padding and base_dir definition
         with open(output_csv, mode="w", encoding="utf-8") as file:
@@ -492,7 +492,7 @@ def create_master_pivot(peaks_dict, ref_spectrum=None, output_dir=None):
             # Drop rows where BOTH positions are unassigned (NaN)
             spec_data = spec_data.dropna(subset=pos_cols, how="all")
 
-            # Strip trailing CCPN peaklist numbers (e.g., ASF1A_2 -> ASF1A)
+            # Strip trailing CCPN peaklist numbers (e.g., Protein_2 -> Protein)
             clean_spec = re.sub(r"_\d+$", "", str(spec))
 
             # Save the CSV with the cleaned name in the main folder

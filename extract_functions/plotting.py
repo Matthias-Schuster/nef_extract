@@ -156,9 +156,9 @@ def plot_nmr_metrics(
             )
 
             plt.xticks(fontfamily="monospace", rotation=90, fontsize=9)
-            plt.xlabel(x_axis_name)
-            plt.title(f"{settings['title']}: {spec_name}")
-            plt.ylabel(settings["ylabel"])
+            plt.xlabel(x_axis_name, size=14)
+            plt.title(f"{settings['title']}: {spec_name}", size=15)
+            plt.ylabel(settings["ylabel"], size=14)
             plt.ylim(0, settings["ylim"])
 
             if category == "CSPs":
@@ -307,7 +307,7 @@ def plot_combined(
 
             fig, ax1 = plt.subplots(figsize=(len(df_plot) * 0.2, 5))
 
-            ax1.set_ylabel(csp_config["ylabel"], color="black")
+            ax1.set_ylabel(csp_config["ylabel"], color="black", size=14)
             ax1.bar(
                 r2,
                 df_plot["shifts"],
@@ -322,7 +322,7 @@ def plot_combined(
                 ax1.set_ylim(0, csp_config["ylim"])
 
             ax2 = ax1.twinx()
-            ax2.set_ylabel(metric_settings["ylabel_attenuation"], color="black")
+            ax2.set_ylabel(metric_settings["ylabel_attenuation"], color="black", size=14)
             ax2.bar(
                 r1,
                 df_plot["normalized"],
@@ -335,8 +335,10 @@ def plot_combined(
             ax2.tick_params(axis="y", labelcolor="black")
             ax2.set_ylim(0, metric_settings["ylim"])
 
-            ax1.set_xlabel(x_axis_name)
-            ax1.set_title(f"NMR Perturbation Analysis ({metric_settings['label']}): {spec_name}")
+            ax1.set_xlabel(x_axis_name, size=14)
+            ax1.set_title(
+                f"NMR Perturbation Analysis ({metric_settings['label']}): {spec_name}", size=15
+            )
 
             ax1.set_xticks(ind)
             ax1.set_xticklabels(

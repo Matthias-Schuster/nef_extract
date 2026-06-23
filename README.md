@@ -29,6 +29,10 @@ conda env create -f environment.yml
 
 # Activate the environment
 conda activate nef_extract
+
+
+# Alternatively you can update your environment
+conda env update -n your_env_name -f environment.yml
 ```
 
 ## 📂 Project Architecture

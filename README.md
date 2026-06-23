@@ -31,7 +31,8 @@ conda env create -f environment.yml
 conda activate nef_extract
 
 
-# Alternatively you can update your environment
+# Alternatively you can compare or update your environment 
+conda compare -n your_env_name environment.yml
 conda env update -n your_env_name -f environment.yml
 ```
 

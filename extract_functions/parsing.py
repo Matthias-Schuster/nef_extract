@@ -218,7 +218,8 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False, output_dir=
             file.write("]\n")
 
         print(
-            f"--Extracted metadata for {len(spectra_plot_data)} 2D spectra and saved to {output_csv}\n"
+            f"--Extracted metadata for {len(spectra_plot_data)} "
+            f"2D spectra and saved to {output_csv}\n"
         )
 
     if report:

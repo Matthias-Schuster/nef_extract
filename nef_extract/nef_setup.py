@@ -1,6 +1,7 @@
 from pathlib import Path
 import sys
 
+
 def setup_nef_project(
     script_file,
     nef_filename=None,
@@ -13,7 +14,7 @@ def setup_nef_project(
     # Location of the currently running extraction script
     script_path = Path(script_file).resolve()
     script_dir = script_path.parent
-    
+
     # Project root is one level above nef_extract/
     root_dir = script_dir.parent
 
@@ -45,7 +46,9 @@ def setup_nef_project(
     if nef_filename:
         input_nef = input_dir / nef_filename
         if not input_nef.exists():
-            raise FileNotFoundError(f"Could not find '{nef_filename}' in the input directory:\n-> {input_nef}")
+            raise FileNotFoundError(
+                f"Could not find '{nef_filename}' in the input directory:\n-> {input_nef}"
+            )
         paths["input_nef"] = input_nef
 
     if verbose:

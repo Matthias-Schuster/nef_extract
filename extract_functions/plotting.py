@@ -4,6 +4,46 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 # =============================================================================
+# HELPER Functions
+# =============================================================================
+
+
+def _get_x_axis_data(analysis_df):
+    """Helper to generate consistent x-axis labels across all plots."""
+    res_code = analysis_df.index.get_level_values("sequence_code")
+    res_letter = analysis_df[("Metadata", "res_single")]
+
+    res_code_str = res_code.fillna(0).astype(str).str.replace(r"\.0$", "", regex=True)
+    is_unassigned = res_letter.astype(str).str.upper() == "UNASSIGNED"
+
+    # Combine number and residue if assigned, otherwise just use the number
+    plot_x = np.where(is_unassigned, res_code_str, res_code_str + " " + res_letter.astype(str))
+
+    # Dynamically set the axis label
+    axis_name = "Peak Number" if is_unassigned.all() else "Residue"
+
+    return plot_x, axis_name
+
+
+def _save_plot(fig_name, analysis_df, output_dir=None):
+    """Helper to handle directory routing, creation, and saving."""
+    if output_dir is not None:
+        save_path = Path(output_dir) / "plots"
+    else:
+        # Read the directory secretly stored in the DataFrame
+        save_path = Path(analysis_df.attrs.get("output_dir", "results")) / "plots"
+
+    save_path.mkdir(parents=True, exist_ok=True)
+
+    analysis_name = analysis_df.attrs.get("analysis_name", "")
+    if analysis_name:
+        save_path = save_path / analysis_name
+        save_path.mkdir(parents=True, exist_ok=True)
+
+    plt.savefig(save_path / fig_name, bbox_inches="tight", dpi=300)
+
+
+# =============================================================================
 # PLOT Functions
 # =============================================================================
 
@@ -70,6 +110,7 @@ def plot_nmr_metrics(
     color_csp="tab:blue",
     color_int="tab:orange",
     color_vol="tab:red",
+    show_original=False,
 ):
     """
     Generates and saves individual bar plots for selected NMR metrics.
@@ -79,33 +120,22 @@ def plot_nmr_metrics(
 
     Args:
         analysis_df (pd.DataFrame):
-            The master analysis DataFrame containing calculated metrics and metadata
-            (expected to have MultiIndex columns).
+            The master analysis DataFrame containing calculated metrics and metadata.
         cutoff (float, optional):
-            Y-value for a horizontal threshold line drawn on CSP plots to indicate significance.
-            Defaults to 0.01.
+            Y-value for a horizontal threshold line drawn on CSP plots. Defaults to 0.01.
         ylim_csp (float, optional):
             Maximum y-axis limit for CSP plots. Defaults to None.
         ylim_ratio (float, optional):
             Maximum y-axis limit for ratio plots. Defaults to 1.1.
         output_dir (str or Path, optional):
-            Base directory where plots will be saved. If None, the function automatically
-            reads the correct project directory hidden in the DataFrame's metadata.
-        CSP (bool, optional):
-            Whether to generate CSP plots. Defaults to True.
-        Int (bool, optional):
-            Whether to generate Intensity ratio plots. Defaults to True.
-        Vol (bool, optional):
-            Whether to generate Volume ratio plots. Defaults to True.
-        color_csp (str, optional):
-            Matplotlib color for CSP plots. Defaults to 'tab:blue'.
-        color_int (str, optional):
-            Matplotlib color for Intensity plots. Defaults to 'tab:orange'.
-        color_vol (str, optional):
-            Matplotlib color for Volume plots. Defaults to 'tab:red'.
-
-    Returns:
-        None: Displays the plots interactively and saves them to disk.
+            Base directory where plots will be saved.
+        CSP, Int, Vol (bool, optional):
+            Toggles for which plots to generate. Default to True.
+        color_csp, color_int, color_vol (str, optional):
+            Matplotlib colors for the respective plots.
+        show_original (bool, optional):
+            If True, bypasses the normalized/ratio values and plots the absolute, raw
+            heights or volumes. The y-axis will auto-scale. Defaults to False.
     """
 
     levels = analysis_df.columns.levels[0]
@@ -115,6 +145,8 @@ def plot_nmr_metrics(
         ylim_csp, ylim_ratio, CSP, Int, Vol, color_csp, color_int, color_vol, int_prefix
     )
 
+    plot_x, x_axis_name = _get_x_axis_data(analysis_df)
+
     for category, settings in config.items():
         if not settings["active"] or category not in levels:
             continue
@@ -122,27 +154,30 @@ def plot_nmr_metrics(
         spec_list = analysis_df[category].columns
 
         for spec_name in spec_list:
-            df_plot = pd.DataFrame(
-                {
-                    "Val": analysis_df[(category, spec_name)],
-                    "Res_Code": analysis_df.index.get_level_values("sequence_code"),
-                    "Res_Letter": analysis_df[("Metadata", "res_single")],
-                }
-            )
 
-            res_code_str = (
-                df_plot["Res_Code"].fillna(0).astype(str).str.replace(r"\.0$", "", regex=True)
-            )
+            y_vals = analysis_df[(category, spec_name)]
+            current_ylabel = settings["ylabel"]
+            current_title = f"{settings['title']}: {spec_name}"
+            current_ylim = settings["ylim"]
+            save_prefix = settings["prefix"]
 
-            is_unassigned = df_plot["Res_Letter"].astype(str).str.upper() == "UNASSIGNED"
+            # --- show_original Logic ---
+            if show_original and ("Height" in category or "Volume" in category):
+                raw_metric = "height" if "Height" in category else "volume"
 
-            # Combine number and residue if assigned, otherwise just use the number
-            df_plot["Plot_X"] = np.where(
-                is_unassigned, res_code_str, res_code_str + " " + df_plot["Res_Letter"].astype(str)
-            )
+                if (spec_name, raw_metric) in analysis_df.columns:
+                    y_vals = analysis_df[(spec_name, raw_metric)]
+                    current_ylabel = f"Absolute {settings['label']}"
+                    current_title = f"Original {settings['label']}s: {spec_name}"
+                    current_ylim = None
+                    save_prefix = f"Orig_{settings['prefix']}"
+                else:
+                    print(
+                        f"⚠️ Raw '{raw_metric}' missing for {spec_name}. "
+                        "Using calculated ratios."
+                    )
 
-            # Dynamically set the axis label
-            x_axis_name = "Peak Number" if is_unassigned.all() else "Residue"
+            df_plot = pd.DataFrame({"Val": y_vals, "Plot_X": plot_x})
 
             df_plot.plot.bar(
                 x="Plot_X",
@@ -157,35 +192,16 @@ def plot_nmr_metrics(
 
             plt.xticks(fontfamily="monospace", rotation=90, fontsize=9)
             plt.xlabel(x_axis_name, size=14)
-            plt.title(f"{settings['title']}: {spec_name}", size=15)
-            plt.ylabel(settings["ylabel"], size=14)
-            plt.ylim(0, settings["ylim"])
+            plt.title(current_title, size=15)
+            plt.ylabel(current_ylabel, size=14)
+
+            if current_ylim is not None:
+                plt.ylim(0, current_ylim)
 
             if category == "CSPs":
                 plt.axhline(y=cutoff, color="red", linestyle=":", linewidth=1)
 
-            if output_dir is not None:
-                save_path = Path(output_dir) / "plots"
-            else:
-                # Read the directory secretly stored in the DataFrame
-                base_dir = analysis_df.attrs.get("output_dir", Path("results"))
-                save_path = Path(base_dir) / "plots"
-
-            save_path.mkdir(parents=True, exist_ok=True)
-
-            if save_path:
-                current_save_path = Path(save_path)
-                analysis_name = analysis_df.attrs.get("analysis_name", "")
-                if analysis_name:
-                    current_save_path = current_save_path / analysis_name
-
-                current_save_path.mkdir(parents=True, exist_ok=True)
-                plt.savefig(
-                    current_save_path / f"{settings['prefix']}_{spec_name}.png",
-                    bbox_inches="tight",
-                    dpi=300,
-                )
-
+            _save_plot(f"{save_prefix}_{spec_name}.png", analysis_df, output_dir)
             plt.show()
             plt.close()
 
@@ -215,42 +231,16 @@ def plot_combined(
         ylim_ratio (float, optional):
             Maximum y-axis limit for the attenuation axis. Defaults to 1.05.
         output_dir (str or Path, optional):
-            Base directory where plots will be saved. If None, the function automatically
-            reads the correct project directory hidden in the DataFrame's metadata.
-        Int (bool, optional):
-            If True, plots Intensity attenuation alongside CSPs. Defaults to True.
-        Vol (bool, optional):
-            If True, plots Volume attenuation alongside CSPs. Defaults to False.
-        color_csp (str, optional):
-            Matplotlib color for CSP bars. Defaults to 'tab:blue'.
-        color_int (str, optional):
-            Matplotlib color for Intensity attenuation bars. Defaults to 'tab:orange'.
-        color_vol (str, optional):
-            Matplotlib color for Volume attenuation bars. Defaults to 'tab:red'.
-
-    Returns:
-        None: Displays the dual-axis plots interactively and saves them to disk.
-        Prints a warning if required CSP or secondary metric data is missing.
+            Base directory where plots will be saved.
+        Int, Vol (bool, optional):
+            Toggles for plotting Intensity or Volume attenuation alongside CSPs.
+        color_csp, color_int, color_vol (str, optional):
+            Matplotlib colors for the respective bars.
     """
     levels = analysis_df.columns.levels[0]
     if "CSPs" not in levels:
         print("Required data (CSPs) missing for combined plot.")
         return
-
-    if output_dir is not None:
-        save_path = Path(output_dir) / "plots"
-    else:
-        # Read the directory secretly stored in the DataFrame
-        base_dir = analysis_df.attrs.get("output_dir", Path("results"))
-        save_path = Path(base_dir) / "plots"
-
-    save_path.mkdir(parents=True, exist_ok=True)
-
-    save_path = Path(save_path)
-    analysis_name = analysis_df.attrs.get("analysis_name", "")
-    if analysis_name:
-        save_path = save_path / analysis_name
-    save_path.mkdir(parents=True, exist_ok=True)
 
     int_prefix = "Norm_" if "Norm_Height" in levels or "Norm_Volume" in levels else "Ratio_"
 
@@ -275,6 +265,7 @@ def plot_combined(
         print("No secondary metrics (Height or Volume) found or selected.")
         return
 
+    plot_x, x_axis_name = _get_x_axis_data(analysis_df)
     spec_list = analysis_df["CSPs"].columns
 
     for metric_col, metric_settings in secondary_metrics.items():
@@ -283,22 +274,9 @@ def plot_combined(
                 {
                     "shifts": analysis_df[("CSPs", spec_name)],
                     "normalized": 1 - analysis_df[(metric_col, spec_name)],
-                    "Res_Code": analysis_df.index.get_level_values("sequence_code"),
-                    "Res_Letter": analysis_df[("Metadata", "res_single")],
+                    "Plot_X": plot_x,
                 }
             )
-
-            res_code_str = (
-                df_plot["Res_Code"].fillna(0).astype(str).str.replace(r"\.0$", "", regex=True)
-            )
-
-            is_unassigned = df_plot["Res_Letter"].astype(str).str.upper() == "UNASSIGNED"
-
-            df_plot["Plot_X"] = np.where(
-                is_unassigned, res_code_str, res_code_str + " " + df_plot["Res_Letter"].astype(str)
-            )
-
-            x_axis_name = "Peak Number" if is_unassigned.all() else "Residue"
 
             ind = np.arange(len(df_plot))
             width = 0.4
@@ -350,10 +328,8 @@ def plot_combined(
             h2, l2 = ax2.get_legend_handles_labels()
             ax1.legend(h1 + h2, l1 + l2, loc="upper right")
 
-            plt.savefig(
-                save_path / f"Combined_{metric_settings['prefix']}_{spec_name}.png",
-                bbox_inches="tight",
-                dpi=300,
+            _save_plot(
+                f"Combined_{metric_settings['prefix']}_{spec_name}.png", analysis_df, output_dir
             )
             plt.show()
             plt.close()

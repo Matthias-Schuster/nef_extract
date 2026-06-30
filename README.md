@@ -126,7 +126,7 @@ All generated files, plots, and PyMOL sessions will automatically be routed to t
 
 ```python
 master_pivot = ef.create_master_pivot(all_peaks, output_dir=out_dir, ref_spectrum=s[0])
-project_data = {"pivot": master_pivot, "sequences": all_sequences, "spectra": s}
+project_data = {"pivot": master_pivot, "sequences": all_sequences, "spectra": s, "out_dir": out_dir,}
 
 # Generate an analysis
 # CSPs and intensities are automatically calculated, stored in a DataFrame, and saved as an Excel file.

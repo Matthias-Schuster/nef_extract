@@ -42,7 +42,12 @@ if CYANA_EXPORT:
 # %%
 if CSP_CALCULATION:
     master_pivot = ef.create_master_pivot(all_peaks, output_dir=out_dir, ref_spectrum=s[0])
-    project_data = {"pivot": master_pivot, "sequences": all_sequences, "spectra": s}
+    project_data = {
+        "pivot": master_pivot,
+        "sequences": all_sequences,
+        "spectra": s,
+        "out_dir": out_dir,
+    }
 
     # %% Analysis 1
     analysis_1 = ef.add_analysis_to_master(
@@ -51,7 +56,7 @@ if CSP_CALCULATION:
         spectra_to_analyze=s,
         align=True,
         normalization_factor=0.95,
-        filename=out_dir / "analysis_1",
+        filename="analysis_1",
     )
 
     ef.plot_nmr_metrics(
@@ -82,7 +87,7 @@ if CSP_CALCULATION:
         spectra_to_analyze=[3, 4],
         align=True,
         normalization_factor=0.95,
-        filename=out_dir / "analysis_2",
+        filename="analysis_2",
     )
 
     ef.plot_nmr_metrics(analysis_2, ylim_csp=None, CSP=True, Int=True, Vol=False)

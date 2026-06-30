@@ -824,25 +824,28 @@ def add_analysis_to_master(
 
     # 8. Saving Logic
     if filename:
-        # Convert the incoming string or Path object into a Path object
-        save_path = Path(filename)
+        # 1. Sanitize filename: Replace slashes with underscores to prevent unwanted folder creation
+        safe_name = str(filename).replace("/", "_").replace("\\", "_")
 
-        # Ensure it has the .xlsx extension without duplicating it
-        if save_path.suffix != ".xlsx":
-            save_path = save_path.with_suffix(".xlsx")
+        # 2. Ensure the .xlsx file extension
+        if not safe_name.lower().endswith(".xlsx"):
+            safe_name += ".xlsx"
 
-        # Create the parent directories (e.g., results/TEMPLATE/) automatically
+        # 3. Retrieve target directory from project_data (fallback to "results") and build path
+        base_dir = Path(project_data.get("out_dir", "results"))
+        save_path = base_dir / safe_name
+
+        # 4. Create parent directories if they don't exist and save the file
         save_path.parent.mkdir(parents=True, exist_ok=True)
-
         final_df.to_excel(save_path)
         print(f"✅ Saved analysis to ({save_path})")
 
-        # Use the stem (filename without extension) for the internal attribute
+        # Save internal attributes for later plotting functions
         final_df.attrs["analysis_name"] = save_path.stem
         final_df.attrs["output_dir"] = save_path.parent
     else:
         final_df.attrs["analysis_name"] = "analysis"
-        final_df.attrs["output_dir"] = Path("results")
+        final_df.attrs["output_dir"] = Path(project_data.get("out_dir", "results"))
 
     # 9. Print Summary
     print("\n--- Analysis Summary ---")

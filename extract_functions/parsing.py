@@ -888,8 +888,6 @@ def add_analysis_to_master(
                 sequences_dict[target_key],
                 match_residue_name=True,
             )
-
-            print(f"✅ Aligned to sequence: {target_key} " "without requiring chain_code to match")
         else:
             print(f"⚠️ Warning: seq_index {seq_index} out of range. Skipping alignment.")
 

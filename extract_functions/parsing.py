@@ -125,7 +125,21 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False, output_dir=
                 if not df.empty:
                     # Sort into correct dictionary based on category
                     if category.endswith("_nef_sequence"):
-                        sequences[saveframe.name] = df
+                        if "chain_code" in df.columns:
+                            unique_chains = df["chain_code"].unique()
+
+                            if len(unique_chains) == 1:
+                                chain = unique_chains[0]
+                                sequences[f"{saveframe.name}_{chain}"] = df
+                            else:
+                                sequences[f"{saveframe.name}_all"] = df
+                                for chain in unique_chains:
+                                    individual_chain_df = df[df["chain_code"] == chain].reset_index(
+                                        drop=True
+                                    )
+                                    sequences[f"{saveframe.name}_{chain}"] = individual_chain_df
+                        else:
+                            sequences[saveframe.name] = df
 
                     elif category.endswith("_nef_chemical_shift"):
                         key = saveframe.name.replace("nef_chemical_shift_list_", "")

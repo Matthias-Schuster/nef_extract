@@ -542,10 +542,30 @@ def normalize_series(series, normalization_factor=1):
     return (series / threshold).clip(0, 1)
 
 
-def align_to_full_sequence(pivot_df, sequence_df):
+def align_to_full_sequence(pivot_df, sequence_df, match_residue_name=True):
     """
-    Creates a full protein skeleton and attaches NMR data.
+    Aligns NMR data to a full sequence skeleton.
+
+    Final output index remains:
+        chain_code, sequence_code, residue_name
+
+    Matching ignores chain_code and uses either:
+        sequence_code + residue_name
+    or:
+        sequence_code only
     """
+
+    def norm_seq(x):
+        if pd.isna(x):
+            return pd.NA
+        try:
+            return str(int(float(x)))
+        except Exception:
+            return str(x).strip()
+
+    # ------------------------------------------------------------
+    # 1. Build full sequence skeleton
+    # ------------------------------------------------------------
     skeleton = (
         sequence_df[["chain_code", "sequence_code", "residue_name"]]
         .copy()
@@ -553,19 +573,67 @@ def align_to_full_sequence(pivot_df, sequence_df):
         .sort_index()
     )
 
-    # Fix the "MergeError" by giving the skeleton a MultiIndex header
     skeleton.columns = pd.MultiIndex.from_product(
         [skeleton.columns, [""]], names=pivot_df.columns.names
     )
 
-    # Left Merge preserves sequence skeleton, filling missing NMR data with NaN
-    return pd.merge(skeleton, pivot_df, left_index=True, right_index=True, how="left")
+    # ------------------------------------------------------------
+    # 2. Build matching keys
+    # ------------------------------------------------------------
+    key_cols = ["_seq_key", "_res_key"] if match_residue_name else ["_seq_key"]
+
+    skeleton_index_df = skeleton.index.to_frame(index=False)
+    skeleton_index_df["_seq_key"] = skeleton_index_df["sequence_code"].apply(norm_seq)
+    skeleton_index_df["_res_key"] = skeleton_index_df["residue_name"].apply(get_one_letter)
+
+    pivot_index_df = pivot_df.index.to_frame(index=False)
+    pivot_index_df["_seq_key"] = pivot_index_df["sequence_code"].apply(norm_seq)
+    pivot_index_df["_res_key"] = pivot_index_df["residue_name"].apply(get_one_letter)
+
+    if len(key_cols) == 1:
+        skeleton_key = pd.Index(
+            skeleton_index_df[key_cols[0]],
+            name=key_cols[0],
+        )
+        pivot_key = pd.Index(
+            pivot_index_df[key_cols[0]],
+            name=key_cols[0],
+        )
+    else:
+        skeleton_key = pd.MultiIndex.from_frame(skeleton_index_df[key_cols])
+        skeleton_key.names = key_cols
+
+        pivot_key = pd.MultiIndex.from_frame(pivot_index_df[key_cols])
+        pivot_key.names = key_cols
+
+    # ------------------------------------------------------------
+    # 3. Reindex NMR data onto sequence skeleton
+    # ------------------------------------------------------------
+    pivot_tmp = pivot_df.copy()
+    pivot_tmp.index = pivot_key
+
+    if pivot_tmp.index.duplicated().any():
+        pivot_tmp = pivot_tmp.groupby(
+            level=list(range(pivot_tmp.index.nlevels)),
+            sort=False,
+        ).first()
+
+    aligned_data = pivot_tmp.reindex(skeleton_key)
+
+    # Restore original biological index
+    aligned_data.index = skeleton.index
+
+    matched = aligned_data.notna().any(axis=1).sum()
+    print(f"✅ Alignment complete: matched {matched} / {len(aligned_data)} residues")
+
+    return pd.concat([skeleton, aligned_data], axis=1)
 
 
 def get_one_letter(res_name):
     """Converts 3-letter amino acid codes to 1-letter codes."""
     if pd.isna(res_name):
         return ""
+
     mapping = {
         "ALA": "A",
         "ARG": "R",
@@ -588,7 +656,13 @@ def get_one_letter(res_name):
         "TYR": "Y",
         "VAL": "V",
     }
-    res = str(res_name).upper()
+
+    res = str(res_name).strip().upper()
+
+    # If already one-letter, return as-is
+    if len(res) == 1:
+        return res
+
     return mapping.get(res, res)
 
 
@@ -758,9 +832,11 @@ def add_analysis_to_master(
                 if i < len(scaling_factors):
                     spec_scale = float(scaling_factors[i])
                 else:
-                    print(f"⚠️ Warning: Missing scaling factor in list for '{
-                            spec_name
-                        }'. Defaulting to 1.0")
+                    print(
+                        f"⚠️ Warning: Missing scaling factor in list for '{spec_name}'. "
+                        "Defaulting to 1.0"
+                    )
+
             elif isinstance(scaling_factors, (int, float)):
                 spec_scale = float(scaling_factors)
 
@@ -804,8 +880,16 @@ def add_analysis_to_master(
             print("⚠️ Warning: 'align' is True, but no sequence was found.")
         elif len(sequences_dict) > seq_index:
             target_key = list(sequences_dict.keys())[seq_index]
-            updated_df = align_to_full_sequence(updated_df, sequences_dict[target_key])
-            print(f"✅ Aligned to sequence: {target_key}")
+
+            print(f"🧬 Using sequence for alignment: {target_key}")
+
+            updated_df = align_to_full_sequence(
+                updated_df,
+                sequences_dict[target_key],
+                match_residue_name=True,
+            )
+
+            print(f"✅ Aligned to sequence: {target_key} " "without requiring chain_code to match")
         else:
             print(f"⚠️ Warning: seq_index {seq_index} out of range. Skipping alignment.")
 

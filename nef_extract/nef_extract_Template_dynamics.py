@@ -46,7 +46,10 @@ ef.export_spectra_plot(all_peaks, output_dir=out_dir, nef_file=input_nef)
 #          Repeated delays are allowed and are used to estimate the errors.
 # model:   "exp2" = I0·exp(-R·t)   |   "exp3" = I0·exp(-R·t) + C
 # error_method: "auto" (duplicates if available, else fit) | "duplicates" | "fit"
-#          or noise=<SD> (CCPN: Estimate Noise -> 'SD') as known point uncertainty (overrides it)
+#          noise=<SD> (CCPN: Estimate Noise -> 'SD') overrides error_method; with repeated
+#          delays better leave it out (the duplicates also contain drift, not only noise).
+# scale_errors: True (default) = errors are scaled up by √χ² if the points scatter more
+#          around the fit than σ explains (σ is a lower limit, errors never get smaller).
 t2 = ef.fit_relaxation(
     all_peaks,
     delays=[17, 34, 51, 85, 136, 17],   # <- your T2 delays in ms

@@ -225,7 +225,18 @@ Error formulas (σ = noise SD, r = ratio):
 * hetNOE: σ_NOE = √(σ_sat² + NOE²·σ_ref²) / |I_ref|
 * T1/T2: σ is the uncertainty of every point in the weighted fit; σ_R = √(cov) of the fit, σ_T = 1000·σ_R / R² (ms)
 
-Without `noise`, T1/T2 errors come from duplicate delays or the fit residuals, hetNOE errors from the peak uncertainties in the NEF file (if present).
+T1/T2 errors (`fit_relaxation`):
+
+| `noise` | `error_method` | σ of every point |
+|---|---|---|
+| given | any | the given noise SD (duplicates are not used; a hint appears if the duplicates scatter clearly more) |
+| – | `"auto"` (default) | pooled scatter of the repeated delays, or the fit residuals if there are no repeats |
+| – | `"duplicates"` | pooled scatter of the repeated delays |
+| – | `"fit"` | scatter of the points around the fitted curve |
+
+With repeated delays it is usually better to leave out `noise`: the duplicates contain the noise **and** drift / peak-height errors between the spectra. With `scale_errors=True` (default) the errors of a peak are multiplied by √χ²_red if its points scatter more around the fit than σ explains (χ²_red > 1); they are never made smaller. The columns `("Fit", "chi2_red")` and `("Fit", "error_scale")` show χ² and the applied factor.
+
+hetNOE errors without `noise` come from the peak uncertainties in the NEF file (if present).
 
 ## 🤝 Contributing
 Contributions, issues, and feature requests are welcome!

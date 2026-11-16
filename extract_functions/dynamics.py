@@ -17,8 +17,8 @@ from .utils import get_one_letter, index_peaklist, natural_sort_order
 #   ("Intensity", <spectrum>)          raw peak heights / volumes
 #   (<rate>,      "value" / "error")   e.g. ("R2", "value") in s^-1
 #   (<time>,      "value" / "error")   e.g. ("T2", "value") in ms
-#   ("Fit",       "I0", "I0_error", "offset", "r_squared", "rel_error" (R_err / R),
-#                 "n_points", "fit_ok",
+#   ("Fit",       "I0", "I0_error", "offset", "r_squared", "chi2_red", "error_scale"
+#                 (√χ² factor applied to the errors), "rel_error" (R_err / R), "n_points", "fit_ok",
 #                 "sign_flipped")   Intensity holds the (sign-corrected) values used in the fit
 #
 # For the hetNOE the metric is ("hetNOE", "value" / "error").
@@ -202,6 +202,9 @@ def _fit_single(t, y, sigma, model, func):
     perr = np.sqrt(np.diag(pcov)) if np.all(np.isfinite(pcov)) else np.full(len(popt), np.nan)
     residuals = y - func(t, *popt)
     ss_tot = np.sum((y - y.mean()) ** 2)
+    # Reduced chi-square with the given point uncertainty (only defined if sigma is known)
+    dof = len(t) - n_par
+    chi2_red = np.sum((residuals / sig) ** 2) / dof if sig is not None and dof > 0 else np.nan
 
     out.update(
         {
@@ -211,6 +214,7 @@ def _fit_single(t, y, sigma, model, func):
             "R_error": perr[1],
             "offset": popt[2] if model == "exp3" else 0.0,
             "r_squared": 1 - np.sum(residuals**2) / ss_tot if ss_tot > 0 else np.nan,
+            "chi2_red": chi2_red,
             "fit_ok": bool(np.isfinite(perr[1]) and popt[1] > 0),
         }
     )
@@ -228,6 +232,7 @@ def fit_relaxation(
     metric="height",
     error_method="auto",
     noise=None,
+    scale_errors=True,
     align=False,
     seq_index=0,
     filename=None,
@@ -269,7 +274,13 @@ def fit_relaxation(
             Known spectral noise as standard deviation (SD, same units as the peak
             heights), used as uncertainty of every point. Overrides ``error_method``.
             CCPN: 'Estimate Noise...' (shortcut EN) -> 'SD', not the 'Noise Level'
-            (= mean + 3.5 SD).
+            (= mean + 3.5 SD). With repeated delays it is usually better to leave it out:
+            the duplicates also contain drift and peak-height errors, not only the noise.
+        scale_errors (bool, optional):
+            For 'duplicates' and 'noise': if the points of a peak scatter more around the
+            fit than σ explains (reduced χ² > 1), its errors are multiplied by √χ².
+            σ is a lower limit, errors are never made smaller. Defaults to True.
+            ('fit' errors already scale with the scatter.)
         align (bool, optional):
             Align the result to the full sequence (needs project_data['sequences']).
         seq_index (int, optional):
@@ -314,10 +325,19 @@ def fit_relaxation(
         )
 
     # --- Error model ---
+    if error_method not in ("auto", "duplicates", "fit"):
+        raise ValueError("error_method must be 'auto', 'duplicates' or 'fit'.")
     sigma_value, method_used = None, "fit"
     if noise is not None:
         sigma_value, method_used = float(noise), "noise"
-        print(f"📏 Using the given noise level σ = {sigma_value:.4g}")
+        print(f"📏 Using the given noise SD σ = {sigma_value:.4g}")
+        dup_sigma, _ = _duplicate_noise(table, delays_s)
+        if dup_sigma is not None and sigma_value < 0.75 * dup_sigma:
+            print(
+                f"ℹ️ The given noise σ = {sigma_value:.3g} is smaller than the scatter of the "
+                f"duplicate delays (σ = {dup_sigma:.3g}) – the errors may be too small. "
+                "Leave out noise= to use the duplicates."
+            )
     elif error_method in ("auto", "duplicates"):
         sigma_value, n_groups = _duplicate_noise(table, delays_s)
         if sigma_value is not None:
@@ -329,8 +349,6 @@ def fit_relaxation(
             )
         elif error_method == "duplicates":
             print("⚠️ No duplicate delays found – falling back to errors from the fit.")
-    elif error_method != "fit":
-        raise ValueError("error_method must be 'auto', 'duplicates' or 'fit'.")
     if method_used == "fit":
         print("📏 Uncertainties from the fit residuals (covariance matrix).")
 
@@ -341,10 +359,25 @@ def fit_relaxation(
         sigma = np.full(len(y), sigma_value) if sigma_value is not None else None
         fits.append(_fit_single(delays_s, y, sigma, model, func))
     fits = pd.DataFrame(fits, index=table.index)
-    for col in ["I0", "I0_error", "R", "R_error", "offset", "r_squared"]:
+    for col in ["I0", "I0_error", "R", "R_error", "offset", "r_squared", "chi2_red"]:
         if col not in fits.columns:
             fits[col] = np.nan
     fits["sign_flipped"] = flipped
+
+    # --- Scale the errors up where the scatter around the fit is larger than σ ---
+    fits["error_scale"] = 1.0
+    scaled = scale_errors and method_used in ("duplicates", "noise")
+    if scaled:
+        factor = np.sqrt(fits["chi2_red"].clip(lower=1.0)).fillna(1.0)
+        fits["error_scale"] = factor
+        fits["R_error"] *= factor
+        fits["I0_error"] *= factor
+        up = fits["fit_ok"].astype(bool) & (factor > 1.0)
+        if up.any():
+            print(
+                f"📏 Errors of {int(up.sum())} / {int(fits['fit_ok'].sum())} peaks scaled up by "
+                f"√χ² (scatter around the fit > σ), median factor {factor[up].median():.2f}"
+            )
     fits["rel_error"] = fits["R_error"] / fits["R"]
 
     r, r_err = fits["R"], fits["R_error"]
@@ -355,8 +388,8 @@ def fit_relaxation(
             time: pd.DataFrame({"value": 1000 / r, "error": 1000 * r_err / r**2}),
             "Fit": fits[
                 [
-                    "I0", "I0_error", "offset", "r_squared", "rel_error",
-                    "n_points", "fit_ok", "sign_flipped",
+                    "I0", "I0_error", "offset", "r_squared", "chi2_red", "error_scale",
+                    "rel_error", "n_points", "fit_ok", "sign_flipped",
                 ]
             ],
         },
@@ -393,8 +426,10 @@ def fit_relaxation(
     )
     settings_sheet = pd.DataFrame(
         {
-            "setting": ["experiment", "model", "metric", "error_method", "noise_sigma"],
-            "value": [experiment, model, metric, method_used, sigma_value],
+            "setting": [
+                "experiment", "model", "metric", "error_method", "noise_sigma", "scale_errors",
+            ],
+            "value": [experiment, model, metric, method_used, sigma_value, bool(scaled)],
         }
     )
     return _finalize(

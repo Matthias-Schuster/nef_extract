@@ -3,7 +3,7 @@ extractions/
 input/
 old/
 nef_extract/*
-!nef_extract/nef_extract_Template.py
+!nef_extract/nef_extract_Template*.py
 !nef_extract/nef_setup.py
 *.png
 *.svg

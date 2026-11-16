@@ -11,6 +11,12 @@ def setup_nef_project(
     create_output_dirs=True,
     verbose=True,
 ):
+    """
+    Project setup for a nef_extract_<Project>.py script: the project name is the part of
+    the filename after 'nef_extract_', results go to results/<Project>/ and the NEF file
+    is taken from input/. Also puts the root folder on sys.path so that
+    'import extract_functions' works. Returns (project_name, paths).
+    """
     # Location of the currently running extraction script
     script_path = Path(script_file).resolve()
     script_dir = script_path.parent

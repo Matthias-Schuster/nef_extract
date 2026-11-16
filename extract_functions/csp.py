@@ -60,7 +60,8 @@ def create_master_pivot(peaks_dict, ref_spectrum=None, output_dir=None):
     """
     Combines all 2D spectra with the same dimensions into one master table (one row per
     residue) and saves it as spectra_analysis.xlsx (sheets: Master_Pivot, Heights_Only,
-    Volumes_Only, Positions_Only and Info with the dimensions for the CSP weights).
+    Volumes_Only, Positions_Only and Info with the dimensions for the CSP weights and
+    the CCPN noise SDs, so both also work with a hand-corrected copy of the file).
     Sequence codes are cast to integers where possible.
 
     The input files for the NMR_plot scripts are written by ``export_spectra_plot``.
@@ -470,31 +471,30 @@ def add_analysis_to_master(
             The signed ratios are averaged first and only then set to >= 0, so the noise
             of broadened peaks averages out. Errors: sqrt(sum σ_i²) / n.
         noise (float, list or dict, optional):
-            Spectral noise as standard deviation (SD, same units as the peak heights) for
-            errors and detection limits of the height ratios. Per spectrum the SD stored
-            by CCPN in the NEF file is used first (shown in the spectrum menu); the value
-            given here is only used for spectra without a stored SD.
-            None: only the NEF values. A number: for every spectrum (and the reference).
-            A list: one value per spectrum in ``spectra_to_analyze`` (same order, None
-            allowed; the length must match). A dict: {spectrum name or menu number: value}.
-            CCPN: right-click -> 'Estimate Noise...' (EN) -> 'SD' (press 'Set Noise Level'
-            to store it in the NEF export). Not the 'Noise Level' (contour base, = mean +
-            3.5 SD). Adds the column groups '<Norm_/Ratio_>Height_Err' (error,
-            sqrt(s_p^2 + r^2 s_ref^2) / |I_ref|) and '<Norm_/Ratio_>Height_LOD' (detection
-            limit, lod_sigma * s_p / |I_ref|). Ratios below the LOD cannot be distinguished
-            from 0 (fully broadened peak). A summary table shows which SD was used.
+            Noise SD (same units as the peak heights) for error bars and detection limits.
+            The SD stored by CCPN in the NEF file is used first, this value only for
+            spectra without one. None = only NEF values; number = all spectra; list = one
+            value per spectrum in ``spectra_to_analyze`` (None allowed); dict = {spectrum
+            name or menu number: value}. A summary table shows the values used.
+            CCPN: Estimate Noise (EN) -> 'SD' ('Set Noise Level' stores it in the NEF),
+            not the 'Noise Level' (= mean + 3.5 SD).
         noise_ref (float, optional):
-            Noise SD of the reference spectrum if it has no NEF value. Defaults to the
-            value from ``noise`` (number, dict entry, or list entry if the reference is
-            one of the analysed spectra).
+            Noise SD of the reference if it has no NEF value. Defaults to the value from
+            ``noise`` (number, dict entry, or list entry if the reference is analysed too).
         use_nef_noise (bool, optional):
-            Use the noise SD stored in the NEF file first. False: only ``noise``.
-            Defaults to True.
+            Use the noise SD from the NEF file first. False: only ``noise``. Default True.
         lod_sigma (float, optional):
             Multiple of the noise used for the detection limit. Defaults to 3.
         filename (str, optional):
             Filename for the exported Excel table (e.g., "analysis_1"). The function
             automatically routes it to the project's specific output directory.
+
+    Error calculation (heights, with a noise SD σ):
+        σ_r = sqrt(σ_p² + r² · σ_ref²) / |I_ref|   -> column group '<Norm_/Ratio_>Height_Err'
+        LOD = lod_sigma · σ_p / |I_ref|             -> column group '<Norm_/Ratio_>Height_LOD'
+        Ratios below the LOD cannot be distinguished from 0 (fully broadened peak), the
+        plots show them in grey. Ratios keep their sign, so the noise of a vanished peak
+        scatters around 0. Normalization and smoothing are applied to the errors too.
 
     Returns:
         pd.DataFrame:

@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 
+from .utils import parse_sequence_code
+
 # =============================================================================
 # CYANA / Xeasy Export Functions
 # =============================================================================
@@ -27,152 +29,102 @@ def export_cyana_seq(sequences_dict, output_dir="results/cyana_export"):
     print(f"✅ Exported {len(sequences_dict)} .seq files to {output_dir}/")
 
 
+# NEF/CCPN atom names -> CYANA/XEASY nomenclature
+CYANA_ATOM_MAP = {
+    "H": "H",
+    "N": "N",
+    "C": "C",
+    "CA": "CA",
+    "CB": "CB",
+    "ND2": "ND2",
+    "ND1": "ND1",
+    "NE2": "NE2",
+    "CG": "CG",
+    "CG1": "CG1",
+    "CG2": "CG2",
+    "CGx": "CG1",
+    "CGy": "CG2",
+    "CG%": "CG1",
+    "CD": "CD",
+    "CD1": "CD1",
+    "CD2": "CD2",
+    "CDx": "CD1",
+    "CDy": "CD2",
+    "CD%": "CD1",
+    "CE": "CE",
+    "CE1": "CE1",
+    "CE2": "CE2",
+    "CEx": "CE1",
+    "CEy": "CE2",
+    "CE%": "CE1",
+    "HA": "HA",
+    "HA%": "QA",
+    "HAx": "HA2",
+    "HAy": "HA3",
+    "HB": "HB",
+    "HBx": "HB2",
+    "HBy": "HB3",
+    "HB%": "QB",
+    "HG": "HG",
+    "HGx": "HG2",
+    "HGy": "HG3",
+    "HGx%": "QG1",
+    "HGy%": "QG2",
+    "HG%": "QG",
+    "HG1x": "HG12",
+    "HG1y": "HG13",
+    "HG1%": "QG1",
+    "HG2%": "QG2",
+    "HDx": "HD2",
+    "HDy": "HD3",
+    "HDx%": "QD1",
+    "HDy%": "QD2",
+    "HD%": "QD",
+    "HD1x": "HD12",
+    "HD1": "HD1",
+    "HD1y": "HD13",
+    "HD1%": "QD1",
+    "HD2%": "QD2",
+    "HD2x": "HD21",
+    "HD2y": "HD22",
+    "HEx": "HE2",
+    "HEy": "HE3",
+    "HEx%": "QE1",
+    "HEy%": "QE2",
+    "HE%": "QE",
+    "HE1x": "HE12",
+    "HE1y": "HE13",
+    "HE1%": "QE1",
+    "HE2%": "QE2",
+    "HE2x": "HE21",
+    "HE2y": "HE22",
+}
+
+# Val and Leu: both methyl groups together are a double pseudo atom in CYANA
+VAL_LEU_OVERRIDES = {
+    "HG%": "QQG",
+    "HD%": "QQD",
+}
+
+
 def get_cyana_atom_name(atom_name, residue_name):
     """
     Maps NEF/standard atom names to CYANA/XEASY nomenclature.
-    Applies special pseudoatom mapping for Valine and Leucine.
+    Applies the double pseudoatoms (QQG/QQD) for Valine and Leucine.
     """
-    atom_map = {
-        "H": "H",
-        "N": "N",
-        "C": "C",
-        "CA": "CA",
-        "CB": "CB",
-        "ND2": "ND2",
-        "ND1": "ND1",
-        "NE2": "NE2",
-        "CG": "CG",
-        "CG1": "CG1",
-        "CG2": "CG2",
-        "CGx": "CG1",
-        "CGy": "CG2",
-        "CG%": "CG1",
-        "CD": "CD",
-        "CD1": "CD1",
-        "CD2": "CD2",
-        "CDx": "CD1",
-        "CDy": "CD2",
-        "CD%": "CD1",
-        "CE": "CE",
-        "CE1": "CE1",
-        "CE2": "CE2",
-        "CEx": "CE1",
-        "CEy": "CE2",
-        "CE%": "CE1",
-        "HA": "HA",
-        "HA%": "QA",
-        "HAx": "HA2",
-        "HAy": "HA3",
-        "HB": "HB",
-        "HBx": "HB2",
-        "HBy": "HB3",
-        "HB%": "QB",
-        "HG": "HG",
-        "HGx": "HG2",
-        "HGy": "HG3",
-        "HGx%": "QG1",
-        "HGy%": "QG2",
-        "HG%": "QG",
-        "HG1x": "HG12",
-        "HG1y": "HG13",
-        "HG1%": "QG1",
-        "HG2%": "QG2",
-        "HDx": "HD2",
-        "HDy": "HD3",
-        "HDx%": "QD1",
-        "HDy%": "QD2",
-        "HD%": "QD",
-        "HD1x": "HD12",
-        "HD1": "HD1",
-        "HD1y": "HD13",
-        "HD1%": "QD1",
-        "HD2%": "QD2",
-        "HD2x": "HD21",
-        "HD2y": "HD22",
-        "HEx": "HE2",
-        "HEy": "HE3",
-        "HEx%": "QE1",
-        "HEy%": "QE2",
-        "HE%": "QE",
-        "HE1x": "HE12",
-        "HE1y": "HE13",
-        "HE1%": "QE1",
-        "HE2%": "QE2",
-        "HE2x": "HE21",
-        "HE2y": "HE22",
-    }
-
-    atom1_map = {
-        "H": "H",
-        "N": "N",
-        "C": "C",
-        "CA": "CA",
-        "CB": "CB",
-        "CG": "CG",
-        "CG1": "CG1",
-        "CG2": "CG2",
-        "CGx": "CG1",
-        "CGy": "CG2",
-        "CG%": "CG1",
-        "CD": "CD",
-        "CD1": "CD1",
-        "CD2": "CD2",
-        "CDx": "CD1",
-        "CDy": "CD2",
-        "CD%": "CD1",
-        "CE": "CE",
-        "CE1": "CE1",
-        "CE2": "CE2",
-        "CEx": "CE1",
-        "CEy": "CE2",
-        "CE%": "CE1",
-        "HA": "HA",
-        "HA%": "QA",
-        "HAx": "HA2",
-        "HAy": "HA3",
-        "HB": "HB",
-        "HBx": "HB2",
-        "HBy": "HB3",
-        "HB%": "QB",
-        "HG": "HG",
-        "HGx": "HG2",
-        "HGy": "HG3",
-        "HGx%": "QG1",
-        "HGy%": "QG2",
-        "HG%": "QQG",
-        "HDx": "HD2",
-        "HDy": "HD3",
-        "HDx%": "QD1",
-        "HDy%": "QD2",
-        "HD%": "QQD",
-        "HD1x": "HD12",
-        "HD1y": "HD13",
-        "HD1%": "QD1",
-        "HD2%": "QD2",
-        "HEx": "HE2",
-        "HEy": "HE3",
-        "HEx%": "QE1",
-        "HEy%": "QE2",
-        "HE%": "QE",
-        "HE1x": "HE12",
-        "HE1y": "HE13",
-        "HE1%": "QE1",
-        "HE2%": "QE2",
-    }
-
     res = str(residue_name).upper()
     atm = str(atom_name)
 
-    if res in ["VAL", "LEU"]:
-        return atom1_map.get(atm, atm)
-    return atom_map.get(atm, atm)
+    if res in ("VAL", "LEU") and atm in VAL_LEU_OVERRIDES:
+        return VAL_LEU_OVERRIDES[atm]
+    return CYANA_ATOM_MAP.get(atm, atm)
 
 
 def export_cyana_prot(shifts_dict, output_dir="results/cyana_export"):
     """
     Simplified CYANA .prot exporter using Pandas-native logic.
     1. Removes any row containing '@'.
-    2. Evaluates math strings (like '3-1' -> 2).
+    2. Converts the CCPN i-1 nomenclature ('3-1' -> 2), without eval().
     3. Merges special/negative shifts only if (SeqNum, Atom) is missing.
     4. Uses get_cyana_atom_name() for nomenclature mapping.
     """
@@ -183,24 +135,8 @@ def export_cyana_prot(shifts_dict, output_dir="results/cyana_export"):
         # 1. Row-wise cleaning: Remove any row where sequence_code starts '@'
         df = df[~df["sequence_code"].astype(str).str.startswith("@", na=False)].copy()
 
-        # 2. Transform Sequence Codes: Evaluate math like '3-1'
-        def safe_eval_seq(val):
-            val = str(val).strip()
-            if not val or val.lower() == "nan":
-                return np.nan
-            # Safely handle '3-1' i-1 nomenclature without eval()
-            if "-" in val and not val.startswith("-"):
-                try:
-                    parts = val.split("-")
-                    return int(float(parts[0])) - int(float(parts[1]))
-                except ValueError:
-                    return np.nan
-            try:
-                return int(float(val))
-            except ValueError:
-                return np.nan
-
-        df["seq_num"] = df["sequence_code"].apply(safe_eval_seq)
+        # 2. Transform Sequence Codes: convert the i-1 nomenclature like '3-1' -> 2
+        df["seq_num"] = df["sequence_code"].apply(parse_sequence_code)
         df = df.dropna(subset=["seq_num"])
 
         # 3. Transform Atom Names: Apply CYANA mapping via helper
@@ -333,8 +269,8 @@ def generate_xeasy_header(spectrum_type, dimensions):
 
 def export_cyana_peaks(peak_dict, output_dir="results/cyana_export"):
     """
-    Exports peak dictionaries to CYANA / Xeasy format.
-    Preserves the exact column order from the input data.
+    Exports every peak list to CYANA / XEASY .peaks format (volume, or the height if
+    there is no volume; CCPN peak id as peak number). Keeps the dimension order of the NEF.
     """
 
     out_path = Path(output_dir)
@@ -358,7 +294,6 @@ def export_cyana_peaks(peak_dict, output_dir="results/cyana_export"):
 
     def get_assignment(row, dim):
         """Extracts and maps sequence/atom info sequentially."""
-        # Cleaned up: No more 'dim == 1' hack needed!
         seq_col = f"sequence_code_{dim}"
         res_col = f"residue_name_{dim}"
         atm_col = f"atom_name_{dim}"
@@ -367,15 +302,13 @@ def export_cyana_peaks(peak_dict, output_dir="results/cyana_export"):
         res = row.get(res_col, "")
         atm = row.get(atm_col, "")
 
-        if pd.isna(seq) or not atm or str(atm) == "nan" or str(seq).startswith("@"):
+        if pd.isna(seq) or pd.isna(atm) or not str(atm) or str(seq).startswith("@"):
             return "0"
 
-        try:
-            seq_num = int(eval(str(seq))) if "-" in str(seq) else int(float(seq))
-            mapped_atm = get_cyana_atom_name(atm, res)
-            return f"{mapped_atm}.{seq_num}"
-        except Exception:
+        seq_num = parse_sequence_code(seq)
+        if pd.isna(seq_num):
             return "0"
+        return f"{get_cyana_atom_name(atm, res)}.{int(seq_num)}"
 
     for name, df in peak_dict.items():
         if df.empty:
@@ -396,8 +329,16 @@ def export_cyana_peaks(peak_dict, output_dir="results/cyana_export"):
 
         lines = []
         for idx, row in df.iterrows():
-            pid = str(row.get("id", idx + 1)).ljust(id_pad)
-            vol = row.get("volume", row.get("height", 0))
+            # Use the CCPN peak id so peaks can be traced back; fall back to the row number
+            try:
+                pid = str(int(row.get("peak_id"))).ljust(id_pad)
+            except (TypeError, ValueError):
+                pid = str(idx + 1).ljust(id_pad)
+
+            # Use the volume if available, otherwise the height
+            vol = row.get("volume", np.nan)
+            if pd.isna(vol):
+                vol = row.get("height", np.nan)
             vol_str = (
                 f"{float(vol):.9e}".ljust(21) if pd.notna(vol) else "0.000000000e+00".ljust(21)
             )

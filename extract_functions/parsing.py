@@ -77,6 +77,10 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False, output_dir=
     dimensions, spectrum file path, contour level and colour). This metadata survives
     renaming via ``spec_rename_map`` and is used by ``export_spectra_plot``.
 
+    If CCPN stored a noise SD for a spectrum ('Estimate Noise' -> 'Set Noise Level' before
+    the NEF export), it is added as ``df.attrs["noise_sd"]`` and shown in the spectrum
+    menu. The intensity and hetNOE analyses use it for the error bars.
+
     Args:
         filepath (str or Path):
             The path to the input NMR Exchange Format (NEF) file.

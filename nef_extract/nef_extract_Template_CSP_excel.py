@@ -48,7 +48,7 @@ ef.create_master_pivot(all_peaks, output_dir=out_dir, ref_spectrum=s[0])
 #    Copy it, otherwise re-running step 4 overwrites your changes.
 # 2. Correct the 'Master_Pivot' sheet (first sheet), e.g. move peaks to the right residue.
 #    Keep the header rows and the first three columns (chain, sequence code, residue name).
-# 3. Keep the 'Info' sheet: it stores the spectrum dimensions for the CSP weighting.
+# 3. Keep the 'Info' sheet: it stores the spectrum dimensions (CSP weights) and the noise SDs.
 #    Without it, a 1H/15N spectrum is assumed (for 13C spectra pass alpha={"13C": 0.33}).
 
 MOD_PIVOT = out_dir / "spectra_analysis_mod.xlsx"

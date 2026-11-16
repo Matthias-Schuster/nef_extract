@@ -272,26 +272,30 @@ def fit_relaxation(
               (pooled over all peaks) and used as the point uncertainty of the fit.
             - 'fit': uncertainties from the fit residuals (covariance matrix).
         noise (float, optional):
-            Known spectral noise as standard deviation (SD, same units as the peak
-            heights), used as uncertainty of every point. Overrides ``error_method``.
-            CCPN: 'Estimate Noise...' (shortcut EN) -> 'SD', not the 'Noise Level'
-            (= mean + 3.5 SD). With repeated delays it is usually better to leave it out:
-            the duplicates also contain drift and peak-height errors, not only the noise.
+            Known noise SD (same units as the peak heights) as uncertainty of every point.
+            Overrides ``error_method``. With repeated delays better leave it out: the
+            duplicates also contain drift and peak-height errors, not only the noise.
+            CCPN: Estimate Noise (EN) -> 'SD', not the 'Noise Level' (= mean + 3.5 SD).
         use_nef_noise (bool, optional):
-            True: use the noise SD stored by CCPN in the NEF file for every spectrum
-            (spectra without one get ``noise``; if that is None too, ``error_method`` is
-            used). Defaults to False, because repeated delays are usually more realistic.
+            Use the noise SD stored by CCPN in the NEF file (spectra without one get
+            ``noise``, else ``error_method`` is used). Defaults to False.
         scale_errors (bool, optional):
-            For 'duplicates' and 'noise': if the points of a peak scatter more around the
-            fit than σ explains (reduced χ² > 1), its errors are multiplied by √χ².
-            σ is a lower limit, errors are never made smaller. Defaults to True.
-            ('fit' errors already scale with the scatter.)
+            Scale the errors of a peak up by √χ² if its points scatter more around the
+            fit than σ explains (χ² > 1); never down. Only for 'duplicates' / noise
+            ('fit' errors already contain the scatter). Defaults to True.
         align (bool, optional):
             Align the result to the full sequence (needs project_data['sequences']).
         seq_index (int, optional):
             Which sequence to align to. Defaults to 0.
         filename (str, optional):
             Name of the Excel output. Defaults to '<experiment>_analysis'.
+
+    Error calculation:
+        σ of every point: ``noise`` / NEF SD, otherwise ``error_method``. σ_R from the
+        covariance of the weighted fit (times √χ² with ``scale_errors``),
+        σ_T = 1000 · σ_R / R² (ms). Columns ('Fit', 'chi2_red') and ('Fit', 'error_scale')
+        show χ² and the applied factor. A hint appears if a given noise is clearly
+        smaller than the scatter of the repeated delays.
 
     Returns:
         pd.DataFrame: Results with rates (s^-1), times (ms), fit statistics and intensities.
@@ -527,17 +531,13 @@ def calc_hetnoe(
         project_data (dict, optional):
             Same dictionary as for the CSP analysis: 'out_dir', 'input_dir', 'sequences'.
         noise (float, tuple or dict, optional):
-            Spectral noise as standard deviation (SD, same units as the peak heights) for
-            the error propagation. Per spectrum the SD stored by CCPN in the NEF file is
-            used first (shown in the spectrum menu); the value given here is only used for
-            spectra without a stored SD. A single value for all spectra, a tuple
-            (noise_sat, noise_ref) that may contain None, or a dict {spectrum_name: noise}.
-            CCPN: 'Estimate Noise...' (EN) -> 'SD', not the 'Noise Level' (= mean + 3.5 SD).
-            Without any noise SD, the peak uncertainties from the NEF file are used if
-            available.
+            Noise SD (same units as the peak heights). The SD stored by CCPN in the NEF
+            file is used first, this value only for spectra without one: a number for all
+            spectra, (noise_sat, noise_ref) with None allowed, or {spectrum_name: noise}.
+            Without any noise SD the peak uncertainties from the NEF file are used.
+            CCPN: Estimate Noise (EN) -> 'SD', not the 'Noise Level' (= mean + 3.5 SD).
         use_nef_noise (bool, optional):
-            Use the noise SD stored in the NEF file first. False: only ``noise``.
-            Defaults to True.
+            Use the noise SD from the NEF file first. False: only ``noise``. Default True.
         metric (str, optional):
             'height' (default) or 'volume'.
         align (bool, optional):

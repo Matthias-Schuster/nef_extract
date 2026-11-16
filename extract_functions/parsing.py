@@ -1,4 +1,5 @@
 import contextlib
+import json
 import os
 
 import numpy as np
@@ -42,6 +43,32 @@ def _spectrum_metadata(saveframe):
     return meta
 
 
+def _ccpn_noise_sd(entry):
+    """
+    Noise SD per spectrum from the CCPN internal data ({spectrum name: SD}).
+    CCPN stores it (internal field '_noiseSD') when 'Set Noise Level' is pressed in the
+    'Estimate Noise' popup. Not part of the NEF standard, so other programs do not write it.
+    """
+    noise = {}
+    for sf in entry.get_saveframes_by_category("ccpn_additional_data"):
+        try:
+            loop = sf.get_loop("_ccpn_internal_data")
+            rows = loop.get_tag(["ccpn_object_pid", "internal_data_string"])
+        except (KeyError, ValueError):
+            continue
+        for pid, text in rows:
+            if not str(pid).startswith("Spectrum:"):
+                continue
+            try:
+                data = json.loads(text).get("_ccpNmrV3internal", {})
+                sd = float(data["_noiseSD"])
+            except (ValueError, TypeError, KeyError, AttributeError):
+                continue
+            if sd > 0:
+                noise[str(pid).split(":", 1)[1]] = sd
+    return noise
+
+
 def extract_all_nef_data(filepath, report=False, spectra_plot=False, output_dir=None):
     """
     Extracts and compiles sequences, chemical shift lists, and peak lists from an NEF file.
@@ -80,6 +107,7 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False, output_dir=
     sequences = {}
     shifts = {}
     peaks = {}
+    noise_sd = _ccpn_noise_sd(entry)  # {spectrum name: SD} from CCPN, may be empty
 
     if report:
         print("\n--Print all loops in the nef file:")
@@ -128,6 +156,9 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False, output_dir=
 
                 # Attach the spectrum metadata to the DataFrame
                 df.attrs = dict(spec_metadata, peaklist_key=key, nef_file=str(filepath))
+                sd = noise_sd.get(spec_metadata.get("spectrum_name"))
+                if sd is not None:
+                    df.attrs["noise_sd"] = sd
                 peaks[key] = df
 
     if report:
@@ -139,6 +170,7 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False, output_dir=
         print(f"Shift List:\t {name}")
     for name in peaks:
         print(f"Peak List:\t {name}")
+    _report_noise_sd(peaks)
 
     if report:
         report_spectrum_architecture(peaks)
@@ -149,6 +181,24 @@ def extract_all_nef_data(filepath, report=False, spectra_plot=False, output_dir=
         export_spectra_plot(peaks, output_dir=output_dir, nef_file=filepath)
 
     return sequences, shifts, peaks
+
+
+def _report_noise_sd(peaks):
+    """Prints which spectra have a CCPN noise SD and warns if one SD was copied to many."""
+    spectra = {}
+    for df in peaks.values():
+        if df.attrs.get("noise_sd") is not None:
+            spectra[df.attrs.get("spectrum_name")] = df.attrs["noise_sd"]
+    if not spectra:
+        return
+    print(f"\n--Noise SD from CCPN found for {len(spectra)} spectra "
+          "(used first for the intensity and hetNOE errors).")
+    values = pd.Series(spectra)
+    copies = values[values.duplicated(keep=False)]
+    if len(copies) >= 3:
+        print(f"⚠️ {len(copies)} spectra have exactly the same noise SD ({copies.iloc[0]:.3g}). "
+              "Probably 'Set Noise Level To All' was used in CCPN, which copies the SD of one "
+              "spectrum to all. Estimate the noise of each spectrum separately.")
 
 
 def generate_rename_template(peak_dict):
@@ -184,8 +234,11 @@ def print_spectrum_menu(peak_dict):
     print("      SPECTRUM MENU")
     print("=" * 25)
 
+    width = max((len(str(n)) for n in s), default=0)
     for i, name in enumerate(s):
-        print(f" {i:2} -> {name}")
+        sd = peak_dict[name].attrs.get("noise_sd")
+        extra = f"   (noise SD {sd:.3g})" if sd is not None else ""
+        print(f" {i:2} -> {str(name).ljust(width)}{extra}".rstrip())
 
     print("=" * 25)
 

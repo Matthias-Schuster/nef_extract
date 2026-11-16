@@ -85,6 +85,7 @@ def create_master_pivot(peaks_dict, ref_spectrum=None, output_dir=None):
     reference_name = ""
     skipped_not_2d = []
     skipped_dims = []
+    noise_sd = {}  # CCPN noise SD per spectrum (used first for the intensity errors)
 
     # --- Dimension Locking ---
     if ref_spectrum is not None:
@@ -111,6 +112,8 @@ def create_master_pivot(peaks_dict, ref_spectrum=None, output_dir=None):
             continue
 
         indexed_dfs[name] = index_peaklist(df, data_cols=data_cols, name=name)
+        if df.attrs.get("noise_sd") is not None:
+            noise_sd[name] = float(df.attrs["noise_sd"])
 
     if skipped_not_2d:
         print(f"ℹ️ Skipped {len(skipped_not_2d)} non-2D spectra: {', '.join(skipped_not_2d)}")
@@ -137,6 +140,7 @@ def create_master_pivot(peaks_dict, ref_spectrum=None, output_dir=None):
     table = table.reindex(columns=new_order, level=1)
 
     table.attrs["dimensions"] = reference_dims
+    table.attrs["noise_sd"] = noise_sd
 
     # --- EXPORT SECTION: Single Workbook, Multiple Sheets ---
     excel_dir = Path(output_dir) if output_dir is not None else Path("results")
@@ -159,8 +163,10 @@ def create_master_pivot(peaks_dict, ref_spectrum=None, output_dir=None):
         # Metadata needed when the pivot is re-loaded from Excel later
         pd.DataFrame(
             {
-                "key": ["dimensions", "reference_spectrum"],
-                "value": [", ".join(map(str, reference_dims)), reference_name],
+                "key": ["dimensions", "reference_spectrum"]
+                + [f"noise_sd:{name}" for name in noise_sd],
+                "value": [", ".join(map(str, reference_dims)), reference_name]
+                + list(noise_sd.values()),
             }
         ).to_excel(writer, sheet_name=INFO_SHEET, index=False)
 
@@ -186,6 +192,11 @@ def _load_pivot_from_excel(pivot_path):
         dims = info.get("dimensions")
         if isinstance(dims, str) and dims:
             pivot_df.attrs["dimensions"] = [d.strip() for d in dims.split(",")]
+        pivot_df.attrs["noise_sd"] = {
+            str(k).split(":", 1)[1]: float(v)
+            for k, v in info.items()
+            if str(k).startswith("noise_sd:") and pd.notna(v)
+        }
     return pivot_df
 
 
@@ -228,22 +239,51 @@ def _smooth_sigma(sigma, window):
     return np.sqrt(var_sum) / count
 
 
-def _resolve_noise(noise, spec_name, ref_name, resolve_spec):
+def _resolve_noise(noise, noise_ref, spectra, ref_name, resolve_spec, nef_noise=None):
     """
-    Noise (standard deviation, same units as the peak heights) for one analysed spectrum
-    and the reference. ``noise`` can be a number (all spectra), a tuple
-    (analysed spectra, reference) or a dict {spectrum name or menu number: noise}.
-    Returns (noise_target, noise_ref) or (None, None).
+    Noise SD (same units as the peak heights) of every analysed spectrum and the reference.
+
+    Per spectrum the SD stored by CCPN in the NEF file (``nef_noise``) is used first,
+    otherwise the given value:
+      noise = None        -> only NEF values
+      noise = number      -> this value for every spectrum (and the reference)
+      noise = list/tuple  -> one value per analysed spectrum (same order, None allowed)
+      noise = dict        -> {spectrum name or menu number: value}
+      noise_ref           -> value for the reference (else taken from noise if possible)
+    Returns ({spectrum: (value, source)}, (ref_value, ref_source)); source 'NEF'/'given'/None.
     """
-    if noise is None:
-        return None, None
+    nef_noise = nef_noise or {}
+    given = {}
     if isinstance(noise, dict):
         resolved = {resolve_spec(k): v for k, v in noise.items()}
-        return resolved.get(spec_name), resolved.get(ref_name)
-    if isinstance(noise, (tuple, list)) and len(noise) == 2:
-        return noise[0], noise[1]
-    return noise, noise
+        unknown = [k for k in resolved if k not in spectra and k != ref_name]
+        if unknown:
+            print(f"⚠️ noise: {', '.join(map(str, unknown))} not in this analysis – ignored.")
+        given = {name: resolved.get(name) for name in spectra}
+        ref_given = resolved.get(ref_name)
+    elif isinstance(noise, (list, tuple)):
+        if len(noise) != len(spectra):
+            raise ValueError(
+                f"noise has {len(noise)} values, but {len(spectra)} spectra are analysed. "
+                "Give one value per spectrum in 'spectra_to_analyze' (None allowed), a single "
+                "number or a dict. The reference gets noise_ref=... (or its NEF value)."
+            )
+        given = dict(zip(spectra, noise))
+        ref_given = given.get(ref_name)  # if the reference is one of the analysed spectra
+    else:
+        given = {name: noise for name in spectra}
+        ref_given = noise
+    if noise_ref is not None:
+        ref_given = noise_ref
 
+    def pick(name, value):
+        if name in nef_noise:
+            return float(nef_noise[name]), "NEF"
+        if value is not None:
+            return float(value), "given"
+        return None, None
+
+    return {name: pick(name, given.get(name)) for name in spectra}, pick(ref_name, ref_given)
 
 def normalize_series(series, normalization_factor=1, clip_lower=True):
     """
@@ -337,6 +377,33 @@ def align_to_full_sequence(pivot_df, sequence_df, match_residue_name=True):
     return pd.concat([skeleton, aligned_data], axis=1)
 
 
+def _print_noise_summary(rows, ref_name, n_r, src_r, lod_sigma, noise, noise_ref):
+    """One table: noise SD (and its source), errors yes/no and residues below the LOD."""
+    any_value = n_r is not None or any(r[1] is not None for r in rows)
+    if not rows or (not any_value and noise is None and noise_ref is None):
+        return  # no noise anywhere: nothing to report (no errors, as before)
+
+    ref_txt = f"{n_r:.3g} ({src_r})" if n_r is not None else "–"
+    print(f"\n📏 Noise SD – reference {ref_name}: {ref_txt}")
+    width = max(len(str(r[0])) for r in rows)
+    print(f"   {'spectrum'.ljust(width)}   noise SD           errors   below LOD ({lod_sigma:g}σ)")
+    for name, value, src, has_err, n_below in rows:
+        sd_txt = f"{value:.3g} ({src})" if value is not None else "–"
+        below = str(n_below) if n_below is not None else "–"
+        print(f"   {str(name).ljust(width)}   {sd_txt.ljust(17)}  {'yes' if has_err else 'no':6}   {below}")
+
+    hint = ("pass noise=... (or noise_ref=... for the reference), or in CCPN: Estimate Noise "
+            "-> 'Set Noise Level' and export the NEF again")
+    if n_r is None:
+        print(f"⚠️ The reference {ref_name} has no noise SD – no errors at all ({hint}).")
+    else:
+        missing = [r[0] for r in rows if r[1] is None]
+        if missing:
+            print(f"⚠️ No errors for {len(missing)} spectrum/spectra without noise SD: "
+                  f"{', '.join(map(str, missing))} ({hint}).")
+    print()
+
+
 def add_analysis_to_master(
     project_data,
     ref_spectra,
@@ -348,6 +415,8 @@ def add_analysis_to_master(
     scaling_factors=None,
     smoothing_window=None,
     noise=None,
+    noise_ref=None,
+    use_nef_noise=True,
     lod_sigma=3,
     filename=None,
 ):
@@ -400,16 +469,27 @@ def add_analysis_to_master(
             count as gaps, unassigned peaks are not smoothed. Good for PRE analyses.
             The signed ratios are averaged first and only then set to >= 0, so the noise
             of broadened peaks averages out. Errors: sqrt(sum σ_i²) / n.
-        noise (float, tuple or dict, optional):
-            Spectral noise as standard deviation (SD), same units as the peak heights, for
-            errors and detection limits of the height ratios. CCPN: right-click in the
-            spectrum -> 'Estimate Noise...' (shortcut EN) and take the 'SD' value. Not the
-            'Noise Level' (contour base, = mean + 3.5 SD, about 3.5x too large).
-            A number is used for all spectra, a tuple means (analysed spectra, reference),
-            a dict maps spectrum names or menu numbers to their noise. Adds the column
-            groups '<Norm_/Ratio_>Height_Err' (error, sqrt(s_p^2 + r^2 s_ref^2) / |I_ref|)
-            and '<Norm_/Ratio_>Height_LOD' (detection limit, lod_sigma * s_p / |I_ref|).
-            Ratios below the LOD cannot be distinguished from 0 (fully broadened peak).
+        noise (float, list or dict, optional):
+            Spectral noise as standard deviation (SD, same units as the peak heights) for
+            errors and detection limits of the height ratios. Per spectrum the SD stored
+            by CCPN in the NEF file is used first (shown in the spectrum menu); the value
+            given here is only used for spectra without a stored SD.
+            None: only the NEF values. A number: for every spectrum (and the reference).
+            A list: one value per spectrum in ``spectra_to_analyze`` (same order, None
+            allowed; the length must match). A dict: {spectrum name or menu number: value}.
+            CCPN: right-click -> 'Estimate Noise...' (EN) -> 'SD' (press 'Set Noise Level'
+            to store it in the NEF export). Not the 'Noise Level' (contour base, = mean +
+            3.5 SD). Adds the column groups '<Norm_/Ratio_>Height_Err' (error,
+            sqrt(s_p^2 + r^2 s_ref^2) / |I_ref|) and '<Norm_/Ratio_>Height_LOD' (detection
+            limit, lod_sigma * s_p / |I_ref|). Ratios below the LOD cannot be distinguished
+            from 0 (fully broadened peak). A summary table shows which SD was used.
+        noise_ref (float, optional):
+            Noise SD of the reference spectrum if it has no NEF value. Defaults to the
+            value from ``noise`` (number, dict entry, or list entry if the reference is
+            one of the analysed spectra).
+        use_nef_noise (bool, optional):
+            Use the noise SD stored in the NEF file first. False: only ``noise``.
+            Defaults to True.
         lod_sigma (float, optional):
             Multiple of the noise used for the detection limit. Defaults to 3.
         filename (str, optional):
@@ -496,6 +576,14 @@ def add_analysis_to_master(
         print(f"ℹ️ alpha={alpha} is used for both dimensions. For separate weights pass "
               f"a dict, e.g. alpha={{'{dims[0]}': ..., '{dims[1]}': ...}}.")
 
+    # Noise SD per spectrum: stored by CCPN in the NEF file first, otherwise the given value
+    nef_noise = pivot_df.attrs.get("noise_sd", {}) if use_nef_noise else {}
+    noise_spec, (n_r, src_r) = _resolve_noise(
+        noise, noise_ref, spectra_to_analyze, ref_spectra, resolve_spec, nef_noise
+    )
+    noise_used = {}  # per analysed spectrum, for the plot legend
+    noise_rows = []  # summary table
+
     # 4. Main Calculation Loop
     for i, spec_name in enumerate(spectra_to_analyze):
         # --- CSP Calculation ---
@@ -534,14 +622,15 @@ def add_analysis_to_master(
                 cat = f"{prefix}{met.capitalize()}"
 
                 # Errors and detection limit from the spectral noise (heights only)
-                n_t, n_r = _resolve_noise(noise, spec_name, ref_spectra, resolve_spec)
+                n_t, src_t = noise_spec[spec_name]
                 err_series = lod_series = None
                 if met == "height" and n_t is not None and n_r is not None:
                     s_t = float(n_t) * spec_scale
                     err_series = np.sqrt(s_t**2 + (ratio_series * float(n_r)) ** 2) / safe_ref.abs()
                     lod_series = (lod_sigma * s_t / safe_ref.abs()).where(ratio_series.notna())
-                elif met == "height" and noise is not None:
-                    print(f"⚠️ No noise SD for '{spec_name}' or '{ref_spectra}' – no errors.")
+                    if spec_name == ref_spectra:  # reference vs itself: ratio exactly 1
+                        err_series = err_series.where(err_series.isna(), 0.0)
+                    noise_used[spec_name] = {"target": (n_t, src_t), "reference": (n_r, src_r)}
 
                 if normalization_factor is not None:
                     threshold = ratio_series.quantile(normalization_factor)
@@ -572,11 +661,11 @@ def add_analysis_to_master(
                 if err_series is not None:
                     updated_df[(f"{cat}_Err", spec_name)] = err_series
                     updated_df[(f"{cat}_LOD", spec_name)] = lod_series
-                    n_below = int((final_series < lod_series).sum())
-                    print(
-                        f"📉 {spec_name}: {n_below} residues below the detection limit "
-                        f"({lod_sigma}σ) – not distinguishable from 0."
-                    )
+                if met == "height":
+                    n_below = int((final_series < lod_series).sum()) if err_series is not None else None
+                    noise_rows.append((spec_name, n_t, src_t, err_series is not None, n_below))
+
+    _print_noise_summary(noise_rows, ref_spectra, n_r, src_r, lod_sigma, noise, noise_ref)
 
     # 5. Handle Alignment
     if align:
@@ -629,6 +718,14 @@ def add_analysis_to_master(
 
     if project_data.get("input_dir"):
         final_df.attrs["input_dir"] = Path(project_data["input_dir"])
+
+    # Settings shown in the plot legend (plot_nmr_metrics / plot_combined, show_info=True)
+    final_df.attrs["analysis_settings"] = {
+        "normalization_factor": normalization_factor,
+        "smoothing_window": smoothing_window if smoothing_window and smoothing_window > 1 else None,
+        "lod_sigma": lod_sigma,
+        "noise": noise_used,
+    }
 
     # 9. Print Summary
     print("\n--- Analysis Summary ---")

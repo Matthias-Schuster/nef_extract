@@ -58,7 +58,7 @@ analysis_1 = ef.add_analysis_to_master(
     align=True,
     normalization_factor=0.95,
     # alpha={"15N": 0.142, "13C": 0.33},  # CSP weights (default); 13C: CO 0.33, Cα/methyl ~0.25
-    noise=None,          # <- noise SD for error bars + detection limit (CCPN: Estimate Noise -> SD)
+    noise=None,          # <- noise SD: NEF value first, else this number / list (one per spectrum) / dict
     filename="analysis_1",
 )
 

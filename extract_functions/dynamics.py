@@ -232,6 +232,7 @@ def fit_relaxation(
     metric="height",
     error_method="auto",
     noise=None,
+    use_nef_noise=False,
     scale_errors=True,
     align=False,
     seq_index=0,
@@ -276,6 +277,10 @@ def fit_relaxation(
             CCPN: 'Estimate Noise...' (shortcut EN) -> 'SD', not the 'Noise Level'
             (= mean + 3.5 SD). With repeated delays it is usually better to leave it out:
             the duplicates also contain drift and peak-height errors, not only the noise.
+        use_nef_noise (bool, optional):
+            True: use the noise SD stored by CCPN in the NEF file for every spectrum
+            (spectra without one get ``noise``; if that is None too, ``error_method`` is
+            used). Defaults to False, because repeated delays are usually more realistic.
         scale_errors (bool, optional):
             For 'duplicates' and 'noise': if the points of a peak scatter more around the
             fit than σ explains (reduced χ² > 1), its errors are multiplied by √χ².
@@ -328,13 +333,32 @@ def fit_relaxation(
     if error_method not in ("auto", "duplicates", "fit"):
         raise ValueError("error_method must be 'auto', 'duplicates' or 'fit'.")
     sigma_value, method_used = None, "fit"
-    if noise is not None:
-        sigma_value, method_used = float(noise), "noise"
+    nef_noise = _nef_noise(peaks_dict, spectra) if use_nef_noise else {}
+    if nef_noise:
+        per_spec = [nef_noise.get(sp, noise) for sp in spectra]
+        missing = [sp for sp, v in zip(spectra, per_spec) if v is None]
+        if missing:
+            names = ", ".join(missing[:4]) + (f" (+{len(missing) - 4} more)" if len(missing) > 4 else "")
+            print(f"⚠️ No noise SD in the NEF for {names} and no noise= given – using "
+                  f"error_method='{error_method}' instead.")
+        else:
+            sigma_value = np.array(per_spec, dtype=float)  # one σ per spectrum
+            noise = sigma_value
+            n_nef = sum(sp in nef_noise for sp in spectra)
+            print(f"📏 Noise SD: {np.min(sigma_value):.3g} – {np.max(sigma_value):.3g} "
+                  f"({n_nef} from the NEF, {len(spectra) - n_nef} given)")
+    elif use_nef_noise:
+        print("ℹ️ use_nef_noise=True, but no noise SD is stored in the NEF for these spectra.")
+    if noise is not None and sigma_value is None:
+        sigma_value = float(noise)
         print(f"📏 Using the given noise SD σ = {sigma_value:.4g}")
+    if noise is not None:
+        method_used = "noise"
         dup_sigma, _ = _duplicate_noise(table, delays_s)
-        if dup_sigma is not None and sigma_value < 0.75 * dup_sigma:
+        given = float(np.median(sigma_value))
+        if dup_sigma is not None and given < 0.75 * dup_sigma:
             print(
-                f"ℹ️ The given noise σ = {sigma_value:.3g} is smaller than the scatter of the "
+                f"ℹ️ The given noise σ = {given:.3g} is smaller than the scatter of the "
                 f"duplicate delays (σ = {dup_sigma:.3g}) – the errors may be too small. "
                 "Leave out noise= to use the duplicates."
             )
@@ -356,7 +380,7 @@ def fit_relaxation(
     fits = []
     for _, row in table.iterrows():
         y = row.to_numpy(dtype=float)
-        sigma = np.full(len(y), sigma_value) if sigma_value is not None else None
+        sigma = None if sigma_value is None else np.broadcast_to(sigma_value, y.shape).astype(float)
         fits.append(_fit_single(delays_s, y, sigma, model, func))
     fits = pd.DataFrame(fits, index=table.index)
     for col in ["I0", "I0_error", "R", "R_error", "offset", "r_squared", "chi2_red"]:
@@ -429,7 +453,10 @@ def fit_relaxation(
             "setting": [
                 "experiment", "model", "metric", "error_method", "noise_sigma", "scale_errors",
             ],
-            "value": [experiment, model, metric, method_used, sigma_value, bool(scaled)],
+            "value": [
+                experiment, model, metric, method_used,
+                None if sigma_value is None else float(np.median(sigma_value)), bool(scaled),
+            ],
         }
     )
     return _finalize(
@@ -447,15 +474,31 @@ def fit_relaxation(
 # -----------------------------------------------------------------------------
 
 
-def _noise_for(noise, spec, position):
-    """Resolves the noise SD of one spectrum from a scalar, list/tuple or dict."""
-    if noise is None:
-        return None
+def _nef_noise(peaks_dict, spectra):
+    """CCPN noise SD stored in the NEF file ({spectrum: SD}), only spectra that have one."""
+    out = {}
+    for spec in spectra:
+        sd = peaks_dict[spec].attrs.get("noise_sd")
+        if sd is not None:
+            out[spec] = float(sd)
+    return out
+
+
+def _noise_for(noise, spec, position, nef_noise=None):
+    """
+    Noise SD of one spectrum: the SD stored by CCPN in the NEF file if there is one,
+    otherwise the given value (number, list/tuple entry or dict entry, may be None).
+    Returns (value, source) with source 'NEF', 'given' or None.
+    """
+    if nef_noise and spec in nef_noise:
+        return float(nef_noise[spec]), "NEF"
     if isinstance(noise, dict):
-        return noise.get(spec)
-    if isinstance(noise, (list, tuple)):
-        return noise[position]
-    return float(noise)
+        value = noise.get(spec)
+    elif isinstance(noise, (list, tuple)):
+        value = noise[position] if position < len(noise) else None
+    else:
+        value = noise
+    return (None, None) if value is None else (float(value), "given")
 
 
 def calc_hetnoe(
@@ -464,6 +507,7 @@ def calc_hetnoe(
     ref,
     project_data=None,
     noise=None,
+    use_nef_noise=True,
     metric="height",
     align=False,
     seq_index=0,
@@ -483,11 +527,17 @@ def calc_hetnoe(
         project_data (dict, optional):
             Same dictionary as for the CSP analysis: 'out_dir', 'input_dir', 'sequences'.
         noise (float, tuple or dict, optional):
-            Spectral noise as standard deviation (SD, same units as the peak heights)
-            for the error propagation: a single value for all spectra, a tuple
-            (noise_sat, noise_ref) or a dict {spectrum_name: noise}. CCPN: 'Estimate
-            Noise...' (shortcut EN) -> 'SD', not the 'Noise Level' (= mean + 3.5 SD).
-            If None, the peak uncertainties from the NEF file are used if available.
+            Spectral noise as standard deviation (SD, same units as the peak heights) for
+            the error propagation. Per spectrum the SD stored by CCPN in the NEF file is
+            used first (shown in the spectrum menu); the value given here is only used for
+            spectra without a stored SD. A single value for all spectra, a tuple
+            (noise_sat, noise_ref) that may contain None, or a dict {spectrum_name: noise}.
+            CCPN: 'Estimate Noise...' (EN) -> 'SD', not the 'Noise Level' (= mean + 3.5 SD).
+            Without any noise SD, the peak uncertainties from the NEF file are used if
+            available.
+        use_nef_noise (bool, optional):
+            Use the noise SD stored in the NEF file first. False: only ``noise``.
+            Defaults to True.
         metric (str, optional):
             'height' (default) or 'volume'.
         align (bool, optional):
@@ -516,13 +566,23 @@ def calc_hetnoe(
     spectra = list(dict.fromkeys(sat + ref))
     table, nef_unc = _collect_intensities(peaks_dict, spectra, metric=metric)
 
+    # Noise SD per spectrum: stored by CCPN in the NEF first, otherwise the given value
+    nef_noise = _nef_noise(peaks_dict, spectra) if use_nef_noise else {}
+
     ratios, ratio_errs = [], []
     for s_name, r_name in zip(sat, ref):
         i_sat, i_ref = table[s_name], table[r_name].replace(0, np.nan)
         noe = i_sat / i_ref
 
-        n_sat = _noise_for(noise, s_name, 0)
-        n_ref = _noise_for(noise, r_name, 1)
+        n_sat, src_sat = _noise_for(noise, s_name, 0, nef_noise)
+        n_ref, src_ref = _noise_for(noise, r_name, 1, nef_noise)
+        if n_sat is not None and n_ref is not None:
+            print(f"📏 Noise SD: sat {s_name} {n_sat:.3g} ({src_sat}), "
+                  f"ref {r_name} {n_ref:.3g} ({src_ref})")
+        elif n_sat is not None or n_ref is not None:
+            missing = [n for n, v in ((s_name, n_sat), (r_name, n_ref)) if v is None]
+            print(f"⚠️ No noise SD for {', '.join(map(repr, missing))} (not in the NEF and not "
+                  "given). Pass noise=... or in CCPN: Estimate Noise -> 'Set Noise Level'.")
         if n_sat is None and nef_unc is not None:
             n_sat = nef_unc[s_name]
         if n_ref is None and nef_unc is not None:
@@ -549,8 +609,9 @@ def calc_hetnoe(
         error = propagated
 
     if error.isna().all():
-        print("⚠️ No noise level given and no peak uncertainties in the NEF file – "
-              "hetNOE errors are empty. Pass noise=... (noise SD from CCPN 'Estimate Noise').")
+        print("⚠️ No noise SD (given or in the NEF file) and no peak uncertainties – hetNOE "
+              "errors are empty. Pass noise=... (CCPN: Estimate Noise -> 'SD') or press "
+              "'Set Noise Level' in CCPN before the NEF export.")
 
     result = pd.concat(
         {

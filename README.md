@@ -160,7 +160,14 @@ analysis_1 = ef.add_analysis_to_master(
 )
 ```
 
-**Errors and detection limit (e.g. PRE):** pass the spectral noise as standard deviation (SD, see [Noise for the error bars](#6-noise-for-the-error-bars)) with `noise=7.4e7` (all spectra), `noise=(n_para, n_ref)` or a dict per spectrum. The analysis then adds the columns `Norm_Height_Err` (σ = √(σ_p² + r²·σ_ref²) / |I_ref|) and `Norm_Height_LOD` (detection limit 3σ_p / |I_ref|, change with `lod_sigma`). Ratios below the LOD cannot be distinguished from 0 (fully broadened peak); `plot_nmr_metrics` draws these bars (and negative ratios) in grey and adds error bars. Intensity ratios keep their sign, so the noise of a vanished peak scatters around 0 instead of being turned positive. With `smoothing_window` the signed values are averaged first and only then set to ≥ 0; the error of the mean is √(Σσᵢ²)/n.
+**Errors and detection limit (e.g. PRE):** pass the spectral noise as standard deviation (SD, see [Noise for the error bars](#6-noise-for-the-error-bars)) with `noise=1.3e8` (all spectra), a list with one value per spectrum in `spectra_to_analyze` (`None` allowed), or a dict `{spectrum name or menu number: value}`; the reference gets `noise_ref=` (or the value from `noise`). A noise SD stored by CCPN in the NEF file is used automatically and wins over these values. A summary table shows the SD and its source for every spectrum, whether errors were calculated and how many residues are below the detection limit:
+
+```text
+📏 Noise SD – reference 25-MTS-AA-hires_2: 1.24e+08 (NEF)
+   spectrum           noise SD           errors   below LOD (3σ)
+   25-MTS-hires_2     1.22e+08 (NEF)     yes      14
+   25-MTS-C-hires_4   1.3e+08 (given)    yes      11
+``` The analysis then adds the columns `Norm_Height_Err` (σ = √(σ_p² + r²·σ_ref²) / |I_ref|) and `Norm_Height_LOD` (detection limit 3σ_p / |I_ref|, change with `lod_sigma`). Ratios below the LOD cannot be distinguished from 0 (fully broadened peak); `plot_nmr_metrics` draws these bars (and negative ratios) in grey and adds error bars. Intensity ratios keep their sign, so the noise of a vanished peak scatters around 0 instead of being turned positive. With `smoothing_window` the signed values are averaged first and only then set to ≥ 0; the error of the mean is √(Σσᵢ²)/n.
 
 ### 4. Plotting and Visualization
 Because the DataFrame tracks its own location metadata, plotting and PDB mapping functions require minimal arguments. 
@@ -168,6 +175,7 @@ Additional arguments are described in the function definition.
 
 * `plot_nmr_metrics` generates bar-plots for individual metrics.
 * `plot_combined` generates a dual-axis plot.
+* With `show_info=True` (default) the intensity plots get a legend inside the plot with the analysis settings: normalization quantile, smoothing window, source of the error bars (noise SD from the NEF or given) and the grey bars below the detection limit. `show_info=False` hides it.
 * `csp_to_pdb` maps the calculated metrics onto an input structure (automatically found in your project's `input/` folder).
 
 ```python
@@ -200,7 +208,7 @@ ef.plot_relaxation_curves(t2)           # every decay with its fit
 ef.plot_relaxation_rates(t2)            # R2 (blue) and T2 (green) per residue, two figures
 ef.plot_relaxation_rates(t2, show="time", ylim=400)   # only T2 (ms); show="rate" for only R2
 
-noe = ef.calc_hetnoe(all_peaks, sat=12, ref=13, noise=(sd_sat, sd_ref), project_data=project_data)  # noise SD, see below
+noe = ef.calc_hetnoe(all_peaks, sat=12, ref=13, noise=(None, None), project_data=project_data)  # noise SD: NEF first, see section 6
 ef.plot_relaxation_rates(noe)           # hetNOE (auto y-range, or e.g. ylim=(-1, 1))
 # hetNOE: folded ~0.7-0.85; flexible loops/termini and disordered proteins 0.5 to -1
 
@@ -218,6 +226,30 @@ How to get it in CCPN:
 2. Choose *Visible Area* and zoom into a region without peaks, or *Random Sampling* for the whole spectrum.
 3. Take the value **SD**, one value per spectrum (sat/ref, para/dia can differ).
 
+**Directly from the NEF file:** if you press **Set Noise Level** in the Estimate Noise popup, CCPN stores the SD of that spectrum and writes it into the NEF export (CCPN internal data, not part of the NEF standard). `extract_all_nef_data` reads it and the spectrum menu shows it:
+
+```text
+ 11 -> 711-1_1   (noise SD 1.48e+07)
+ 12 -> 711-2_1   (noise SD 1.11e+07)
+```
+
+Rule for every spectrum: **the SD stored in the NEF is used first, otherwise the value you pass with `noise`.** So you can always write your fallback values and the NEF values win where they exist:
+
+```python
+analysis = ef.add_analysis_to_master(project_data, ref_spectra=1, spectra_to_analyze=0, noise=None)        # only NEF values
+analysis = ef.add_analysis_to_master(project_data, ref_spectra=4, spectra_to_analyze=[2, 3], noise=1.3e8)  # NEF, else 1.3e8
+noe = ef.calc_hetnoe(all_peaks, sat=12, ref=11, noise=(None, None))          # (sat, ref): NEF, else nothing
+noe = ef.calc_hetnoe(all_peaks, sat=12, ref=11, noise=(1.1e7, 1.3e7))        # NEF, else these numbers
+```
+
+The output shows where each value comes from, e.g. `📏 Noise SD: sat 711-2_1 1.11e+07 (NEF), ref 711-1_1 1.3e+07 (given)`.
+
+* Intensities (`add_analysis_to_master`) and hetNOE use the NEF values automatically; `use_nef_noise=False` switches it off (then only `noise` counts).
+* T1/T2 (`fit_relaxation`) only with `use_nef_noise=True`, because repeated delays are usually the more realistic error source.
+* The SD is also saved in the `Info` sheet of `spectra_analysis.xlsx`, so it works with a hand-corrected pivot too.
+* Estimate each spectrum separately. *Set Noise Level To All* copies the SD of one spectrum to all others; a warning appears if many spectra have exactly the same SD.
+* The stored SD is not updated if you change the Noise Level by hand later.
+
 Do **not** use the *Noise Level* (Spectrum Properties, contour base, peak-picking threshold). CCPN sets it to mean + 3.5·SD, so it is about 3.5× too large and makes the errors and detection limits far too big. If you only have an estimated Noise Level that was not changed by hand: SD ≈ (Noise Level − Mean) / 3.5.
 
 Error formulas (σ = noise SD, r = ratio):
@@ -229,14 +261,14 @@ T1/T2 errors (`fit_relaxation`):
 
 | `noise` | `error_method` | σ of every point |
 |---|---|---|
-| given | any | the given noise SD (duplicates are not used; a hint appears if the duplicates scatter clearly more) |
+| given (or `use_nef_noise=True`) | any | the given / NEF noise SD (duplicates are not used; a hint appears if the duplicates scatter clearly more) |
 | – | `"auto"` (default) | pooled scatter of the repeated delays, or the fit residuals if there are no repeats |
 | – | `"duplicates"` | pooled scatter of the repeated delays |
 | – | `"fit"` | scatter of the points around the fitted curve |
 
 With repeated delays it is usually better to leave out `noise`: the duplicates contain the noise **and** drift / peak-height errors between the spectra. With `scale_errors=True` (default) the errors of a peak are multiplied by √χ²_red if its points scatter more around the fit than σ explains (χ²_red > 1); they are never made smaller. The columns `("Fit", "chi2_red")` and `("Fit", "error_scale")` show χ² and the applied factor.
 
-hetNOE errors without `noise` come from the peak uncertainties in the NEF file (if present).
+hetNOE errors use the noise SD stored in the NEF, otherwise the given `noise`, otherwise the peak uncertainties in the NEF file (if present).
 
 ## 🤝 Contributing
 Contributions, issues, and feature requests are welcome!

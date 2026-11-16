@@ -68,7 +68,7 @@ if CSP_CALCULATION:
         align=True,
         normalization_factor=0.95,
         # alpha={"15N": 0.142, "13C": 0.33},  # CSP weights (default); 13C: CO 0.33, Cα/methyl ~0.25
-        noise=None,          # <- noise SD for error bars + detection limit (CCPN: Estimate Noise -> SD)
+        noise=None,          # <- noise SD: NEF value first, else this number / list (one per spectrum) / dict
         filename="analysis_1",
     )
 
@@ -122,16 +122,13 @@ if DYNAMICS:
 
     # hetNOE: sat = weaker/negative peaks, ref = all positive (values far above 1 -> swapped).
     # Typical: folded ~0.7-0.85, flexible loops/termini and disordered proteins 0.5 to -1.
-    # noise: SD of each spectrum (CCPN: right-click -> Estimate Noise (EN) -> 'SD',
-    #        not the 'Noise Level' = mean + 3.5 SD)
-    noise_sat = None      # <- noise SD of the saturated spectrum
-    noise_ref = None      # <- noise SD of the reference spectrum
-
+    # noise: (sat, ref) - the SD stored by CCPN in the NEF is used first, your numbers only
+    #        for spectra without one (CCPN Estimate Noise -> 'SD', not the 'Noise Level')
     noe = ef.calc_hetnoe(
         all_peaks,
         sat=12,           # <- saturated spectrum
         ref=13,           # <- reference spectrum
-        noise=(noise_sat, noise_ref) if noise_sat and noise_ref else None,
+        noise=(None, None),   # <- (sat, ref): NEF SD if stored, else these numbers
         project_data=project_data,
         align=True,
     )

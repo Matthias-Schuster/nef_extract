@@ -46,8 +46,8 @@ ef.export_spectra_plot(all_peaks, output_dir=out_dir, nef_file=input_nef)
 #          Repeated delays are allowed and are used to estimate the errors.
 # model:   "exp2" = I0·exp(-R·t)   |   "exp3" = I0·exp(-R·t) + C
 # error_method: "auto" (duplicates if available, else fit) | "duplicates" | "fit"
-#          noise=<SD> (CCPN: Estimate Noise -> 'SD') overrides error_method; with repeated
-#          delays better leave it out (the duplicates also contain drift, not only noise).
+#          noise=<SD> overrides error_method; use_nef_noise=True takes the SD stored by CCPN.
+#          With repeated delays better leave both out (duplicates also contain drift, not only noise).
 # scale_errors: True (default) = errors are scaled up by √χ² if the points scatter more
 #          around the fit than σ explains (σ is a lower limit, errors never get smaller).
 t2 = ef.fit_relaxation(
@@ -88,19 +88,17 @@ ef.csp_to_pdb(t1, pdb="input.pdb")
 # ==========================================
 # sat / ref: the saturated spectrum has the weaker (flexible regions: negative) peaks,
 #            the reference is all positive. Values far above 1 mean sat and ref are swapped.
-# noise:     noise SD of each spectrum for the error bars. CCPN: right-click in the spectrum ->
-#            'Estimate Noise...' (shortcut EN) -> take 'SD', not the 'Noise Level' (contour base,
-#            = mean + 3.5 SD). Without noise and without peak uncertainties there are no error bars.
+# noise:     (sat, ref) noise SD for the error bars. The SD that CCPN stored in the NEF is used
+#            first (spectrum menu shows it; CCPN: Estimate Noise -> 'Set Noise Level' before the
+#            export). Your numbers are only used for spectra without a stored SD; None = none.
+#            Numbers: CCPN Estimate Noise (EN) -> 'SD', not the 'Noise Level' (= mean + 3.5 SD).
 # Typical values: folded ~0.7-0.85, flexible loops/termini and disordered proteins 0.5 to -1.
 # For repeated measurements pass lists: sat=[12, 14], ref=[13, 15]
-noise_sat = None      # <- noise SD of the saturated spectrum
-noise_ref = None      # <- noise SD of the reference spectrum
-
 noe = ef.calc_hetnoe(
     all_peaks,
     sat=12,           # <- saturated spectrum
     ref=13,           # <- reference spectrum
-    noise=(noise_sat, noise_ref) if noise_sat and noise_ref else None,
+    noise=(None, None),   # <- (sat, ref): NEF SD if stored, else these numbers
     project_data=project_data,
     align=True,
     filename="hetNOE_analysis",

@@ -79,16 +79,70 @@ def _below_lod(values, lod):
     return below
 
 
-def _below_lod_legend(ax, below, loc="upper right", extra_handles=()):
-    """Legend entry for the grey bars (only if there are any)."""
+def _info_entries(analysis_df, spec_name, below, has_err, raw=False):
+    """
+    Legend entries with the analysis settings: normalization, smoothing, source of the
+    error bars and the grey 'below detection limit' bars.
+    """
+    from matplotlib.lines import Line2D
     from matplotlib.patches import Patch
 
-    handles = list(extra_handles)
+    settings = analysis_df.attrs.get("analysis_settings", {})
+
+    def text(label):
+        return Line2D([], [], linestyle="none", label=label)
+
+    entries = []
+    if not raw:
+        q = settings.get("normalization_factor")
+        if q is not None:
+            entries.append(text(f"normalized: {q:g} quantile = 1"))
+        w = settings.get("smoothing_window")
+        if w:
+            entries.append(text(f"smoothed over {w} residues"))
+        if has_err:
+            used = settings.get("noise", {}).get(spec_name, {})
+            sources = sorted({src for _, src in used.values() if src})
+            entries.append(text(f"error bars: noise SD ({' + '.join(sources) or 'given'})"))
     if below.any():
-        handles.append(Patch(facecolor=BELOW_LOD_COLOR, edgecolor="black", linewidth=0.35,
-                             label="below detection limit (≈ 0)"))
-    if handles:
-        ax.legend(handles=handles, loc=loc, fontsize=9, framealpha=0.9)
+        k = settings.get("lod_sigma", 3)
+        entries.append(Patch(facecolor=BELOW_LOD_COLOR, edgecolor="black", linewidth=0.35,
+                             label=f"below detection limit ({k:g}σ) ≈ 0"))
+    return entries
+
+
+def _show_legend(ax, handles, loc="best"):
+    """Legend inside the plot; 'best' picks the position that covers the fewest bars."""
+    if not handles:
+        return
+    ax.legend(handles=handles, loc=loc, fontsize=9, framealpha=0.9, handlelength=1.5)
+
+
+def _free_corner(tops, n_entries, fig, ax):
+    """
+    Upper corner (right / left / center) where a legend covers the least bar height.
+    ``tops``: bar tops as fraction of the y-axis (0-1) per residue, e.g. the higher of
+    two bar series. Used for twin-axis plots, where loc='best' only sees one axis.
+    """
+    tops = np.nan_to_num(np.asarray(tops, dtype=float), nan=0.0)
+    if not len(tops):
+        return "upper right"
+    bbox = ax.get_position()
+    ax_w = bbox.width * fig.get_figwidth()
+    ax_h = bbox.height * fig.get_figheight()
+    legend_w = min(3.4 / ax_w, 1.0)                     # about 3.4 inch wide
+    legend_h = min((0.27 * n_entries + 0.2) / ax_h, 1.0)  # about 0.27 inch per entry
+    x = (np.arange(len(tops)) + 0.5) / len(tops)
+    spans = {
+        "upper right": (1 - legend_w, 1.0),
+        "upper left": (0.0, legend_w),
+        "upper center": (0.5 - legend_w / 2, 0.5 + legend_w / 2),
+    }
+    covered = {
+        loc: np.clip(tops[(x >= a) & (x <= b)] - (1 - legend_h), 0, None).sum()
+        for loc, (a, b) in spans.items()
+    }
+    return min(covered, key=covered.get)
 
 
 # =============================================================================
@@ -159,6 +213,7 @@ def plot_nmr_metrics(
     color_int="tab:orange",
     color_vol="tab:red",
     show_original=False,
+    show_info=True,
 ):
     """
     Generates and saves individual bar plots for selected NMR metrics.
@@ -184,6 +239,10 @@ def plot_nmr_metrics(
         show_original (bool, optional):
             If True, bypasses the normalized/ratio values and plots the absolute, raw
             heights or volumes. The y-axis will auto-scale. Defaults to False.
+        show_info (bool, optional):
+            Legend (inside the plot) with the analysis settings: normalization quantile,
+            smoothing window, source of the error bars and the grey bars below the
+            detection limit. Defaults to True.
 
     If the analysis was run with ``noise=...``, the intensity plots show error bars and
     bars below the detection limit (or negative) are grey: 0 within the noise.
@@ -250,7 +309,9 @@ def plot_nmr_metrics(
                 yerr=err,
                 error_kw={"elinewidth": 0.6, "capsize": 1.5, "capthick": 0.6, "ecolor": "black"},
             )
-            _below_lod_legend(ax, below)
+            if show_info and category != "CSPs":
+                _show_legend(ax, _info_entries(analysis_df, spec_name, below, err is not None,
+                                               raw=save_prefix.startswith("Orig_")))
             _bar_axes(ax, plot_x, x_axis_name, current_ylabel, current_title)
 
             if current_ylim is not None:
@@ -280,6 +341,7 @@ def plot_combined(
     color_csp="tab:blue",
     color_int="tab:orange",
     color_vol="tab:red",
+    show_info=True,
 ):
     """
     Creates a dual-axis bar plot visualizing CSPs alongside signal attenuation.
@@ -300,6 +362,9 @@ def plot_combined(
             Toggles for plotting Intensity or Volume attenuation alongside CSPs.
         color_csp, color_int, color_vol (str, optional):
             Matplotlib colors for the respective bars.
+        show_info (bool, optional):
+            Adds the analysis settings (normalization, smoothing, error bars, below
+            detection limit) to the legend. Defaults to True.
     """
     levels = analysis_df.columns.levels[0]
     if "CSPs" not in levels:
@@ -403,7 +468,15 @@ def plot_combined(
                     (metric_settings["color"], metric_settings["label"]),
                 ]
             ]
-            _below_lod_legend(ax1, below, extra_handles=handles)
+            if show_info:
+                handles += _info_entries(analysis_df, spec_name, below, err is not None)
+            # Free corner considering both bar series (CSP on ax1, attenuation on ax2);
+            # the legend sits on ax2, otherwise the attenuation bars would cover it
+            csp_top = df_plot["shifts"].to_numpy(dtype=float) / ax1.get_ylim()[1]
+            att = df_plot["normalized"].to_numpy(dtype=float)
+            att_top = (att + (np.nan_to_num(err) if err is not None else 0)) / ax2.get_ylim()[1]
+            corner = _free_corner(np.fmax(csp_top, att_top), len(handles), fig, ax1)
+            _show_legend(ax2, handles, loc=corner)
 
             _save_plot(
                 f"Combined_{metric_settings['prefix']}_{spec_name}.png", analysis_df, output_dir
